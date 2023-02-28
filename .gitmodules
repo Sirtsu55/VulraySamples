@@ -1,0 +1,9 @@
+[submodule "Vulray"]
+	path = Vulray
+	url = https://github.com/Sirtsu55/Vulray.git
+[submodule "Vendor/glfw"]
+	path = Vendor/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "Vendor/glm"]
+	path = Vendor/glm
+	url = https://github.com/g-truc/glm.git
