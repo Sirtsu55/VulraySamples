@@ -10,13 +10,16 @@ Application::Application()
 
     if(glfwVulkanSupported() != GLFW_TRUE)
     {
-        VULRAY_LOG_RED("Vulkan is not supported on this system");
+        VULRAY_LOG_ERROR("Vulkan is not supported on this system");
         throw std::runtime_error("Vulkan is not supported on this system");
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); //Sets the client API to GLFW_NO_API, which means that the application will not create an OpenGL context
 
     mWindow = glfwCreateWindow(mWidth, mHeight, "HelloTriangle", nullptr, nullptr); //Creates a window
+
+    // specify debug callback by passing a pointer to the function if you want to use it
+    // vr::LogCallback = logcback;
 
 
     vr::VulkanBuilder builder;
@@ -128,7 +131,7 @@ void Application::BeginFrame()
 
     if(result.result == vk::Result::eErrorOutOfDateKHR)
     {
-        VULRAY_LOG_RED("Swapchain out of date");
+        VULRAY_LOG_ERROR("Swapchain out of date");
         return;
     }
     else if(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR)

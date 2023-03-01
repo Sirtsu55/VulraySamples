@@ -58,12 +58,26 @@ void HelloTriangle::CreateAS()
         sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // same as above
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); 
+    auto transBuffer = mVRDev->CreateBuffer(
+        sizeof(vk::TransformMatrixKHR),
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
 
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3); // upload the vertex data to the buffer, this will use mapping and memcpy 
+    VkTransformMatrixKHR blasTransformMatrix = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f };
+
+    // upload the vertex data to the buffer, UpdateBuffer(...) will use mapping the buffer and memcpy 
+    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3); 
     mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); // same as above
+	mVRDev->UpdateBuffer(transBuffer, &blasTransformMatrix, sizeof(vk::TransformMatrixKHR)); // buffer used for the transform matrix of the BLAS
 
+	// Create info struct for the BLAS
     vr::BLASCreateInfo blasCreateInfo = {};
-
+    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+    
+	// triangle geometry data, BLASCreateInfo can have multiple geometries
     vr::GeometryData geomData = {};
 
     geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
@@ -71,42 +85,38 @@ void HelloTriangle::CreateAS()
     geomData.IndexType = vk::IndexType::eUint32;
     geomData.TriangleCount = 1;
     
+	//Helper Function: vr::FillBottomAccelGeometry(...) takes vr::GeometryData and converts it to a VkAccelerationStructureGeometryKHR struct that is required
+	//by vr::BLASCreateInfo. Vertex, index and optionally transform buffers are also required for this function
+    auto traingleGeometry = vr::FillBottomAccelGeometry(geomData, mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, transBuffer.DevAddress);
+	
+    // add triangle geometry to the BLAS create info
+    // NOTE: BLASCreateInfo can have multiple geometries and they are of type VkAccelerationStructureGeometryKHR
+    blasCreateInfo.Geometries.push_back(traingleGeometry);
 
-
-    auto transBuffer = mVRDev->CreateBuffer(
-        sizeof(vk::TransformMatrixKHR),
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
-
-    VkTransformMatrixKHR blasTransformMatrix = {
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f };  
-
-    mVRDev->UpdateBuffer(transBuffer, &blasTransformMatrix, sizeof(vk::TransformMatrixKHR));
-    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-    blasCreateInfo.Geometries.push_back(vr::FillBottomAccelGeometry(geomData, mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, transBuffer.DevAddress));
-
-    mBLASHandle = mVRDev->CreateBLAS(blasCreateInfo); // this only creates the BLAS, it does not build it
+    // this only creates the BLAS, it does not build it
+	// it creates acceleration structure and allocates memory for it and scratch memory
+    mBLASHandle = mVRDev->CreateBLAS(blasCreateInfo); 
 
     // create a TLAS
-    VkTransformMatrixKHR transformMatrix1 = {
+    // 
+    // transform of the instalce
+    VkTransformMatrixKHR transformMatrix = {
 			1.0f, 0.0f, 0.0f, 0.0f,
 			0.0f, 1.0f, 0.0f, 0.0f,
 			0.0f, 0.0f, 1.0f, 0.0f };    
-    
-    vr::TLASCreateInfo tlasCreateInfo = {};
-    auto inst1 = vk::AccelerationStructureInstanceKHR()
+	//Specify the instance data
+    auto inst = vk::AccelerationStructureInstanceKHR()
         .setInstanceCustomIndex(0)
 		.setAccelerationStructureReference(mBLASHandle.AccelBuf.DevAddress)
-        .setTransform(transformMatrix1)
+        .setTransform(transformMatrix)
 		.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
         .setMask(0xFF)
         .setInstanceShaderBindingTableRecordOffset(0);
 
 
-    std::vector<vk::AccelerationStructureInstanceKHR> instances = { inst1 };
+    std::vector<vk::AccelerationStructureInstanceKHR> instances = { inst };
     
+    vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.MaxInstanceCount = 2;
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
     mTLASHandle = mVRDev->CreateTLAS(tlasCreateInfo);
