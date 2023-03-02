@@ -42,10 +42,15 @@ public:
 void HelloTriangle::CreateAS()
 {
     // vertex and index data for the triangle
-    float vertices[] = {
+    float vertices1[] = {
         1.0f, 1.0f, 0.0f,
         -1.0f, 1.0f, 0.0f,
         0.0f,  -1.0f, 0.0f
+    };
+        float vertices2[] = {
+        1.0f, 2.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f,
+        0.0f,  -2.0f, 0.0f
     };
     uint32_t indices[] = { 0, 1, 2 };
 
@@ -57,21 +62,11 @@ void HelloTriangle::CreateAS()
     mIndexBuffer = mVRDev->CreateBuffer(
         sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // same as above
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); 
-    auto transBuffer = mVRDev->CreateBuffer(
-        sizeof(vk::TransformMatrixKHR),
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
 
-    VkTransformMatrixKHR blasTransformMatrix = {
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f };
-
     // upload the vertex data to the buffer, UpdateBuffer(...) will use mapping the buffer and memcpy 
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3); 
+    mVRDev->UpdateBuffer(mVertexBuffer, vertices1, sizeof(float) * 3 * 3); 
     mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); // same as above
-	mVRDev->UpdateBuffer(transBuffer, &blasTransformMatrix, sizeof(vk::TransformMatrixKHR)); // buffer used for the transform matrix of the BLAS
 
 	// Create info struct for the BLAS
     vr::BLASCreateInfo blasCreateInfo = {};
@@ -86,8 +81,8 @@ void HelloTriangle::CreateAS()
     geomData.TriangleCount = 1;
     
 	//Helper Function: vr::FillBottomAccelGeometry(...) takes vr::GeometryData and converts it to a VkAccelerationStructureGeometryKHR struct that is required
-	//by vr::BLASCreateInfo. Vertex, index and optionally transform buffers are also required for this function
-    auto traingleGeometry = vr::FillBottomAccelGeometry(geomData, mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, transBuffer.DevAddress);
+	//by vr::BLASCreateInfo. Vertex, index and optionally transform buffers are  required for this function
+    auto traingleGeometry = vr::FillBottomAccelGeometry(geomData, mVertexBuffer.DevAddress, mIndexBuffer.DevAddress);
 	
     // add triangle geometry to the BLAS create info
     // NOTE: BLASCreateInfo can have multiple geometries and they are of type VkAccelerationStructureGeometryKHR
@@ -98,7 +93,6 @@ void HelloTriangle::CreateAS()
     mBLASHandle = mVRDev->CreateBLAS(blasCreateInfo); 
 
     // create a TLAS
-    // 
     // transform of the instalce
     VkTransformMatrixKHR transformMatrix = {
 			1.0f, 0.0f, 0.0f, 0.0f,
@@ -129,7 +123,9 @@ void HelloTriangle::CreateAS()
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
     // build the AS
-    mVRDev->BuildBLAS(mBLASHandle, blasCreateInfo, buildCmd);
+
+    mVRDev->BuildBLAS({mBLASHandle}, {blasCreateInfo}, buildCmd);
+    mVRDev->AddAccelerationBuildBarrier(buildCmd);
     mVRDev->BuildTLAS(mTLASHandle, tlasCreateInfo, buildCmd);
 
     buildCmd.end();
@@ -142,8 +138,6 @@ void HelloTriangle::CreateAS()
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
     
     mDevice.waitIdle();
-
-    mVRDev->DestroyBuffer(transBuffer);
 
 	mVRDev->PostBuildBLASCleanup(mBLASHandle);
     
@@ -206,7 +200,7 @@ void HelloTriangle::CreateRTPipeline()
     // create the ray tracing pipeline
     mPipelineLayout = mVRDev->CreatePipelineLayout(mDescriptorSet.Layout);
 
-    mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT);
+    mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
 
