@@ -35,6 +35,10 @@ public:
 
     vr::BLASHandle mBLASHandle;
     vr::TLASHandle mTLASHandle;
+    vr::TLASBuildInfo mTLASBuildInfo;
+
+    vr::AllocatedBuffer mInstanceBuffer;
+    vr::AllocatedBuffer mScratchBuffer;
 
 
 };
@@ -43,41 +47,40 @@ void HelloTriangle::CreateAS()
 {
     // vertex and index data for the triangle
     float vertices1[] = {
+        -1.0f, 1.0f, 0.0f,
+        -3.0f, 1.0f, 0.0f,
+        -2.0f,  -1.0f, 0.0f
+    };
+    float vertices2[] = {
         1.0f, 1.0f, 0.0f,
         -1.0f, 1.0f, 0.0f,
         0.0f,  -1.0f, 0.0f
     };
-    float vertices2[] = {
-        1.0f, 2.0f, -1.0f,
-        -1.0f, 1.0f, -1.0f,
-        0.0f,  -2.0f, -1.0f
+    float vertices3[] = {
+        3.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 0.0f,
+        2.0f,  -1.0f, 0.0f
     };
     uint32_t indices[] = { 0, 1, 2 };
 
     // create a buffer for the vertices and copy the data to it
     mVertexBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 3 * 3, // 3 vertices, 3 floats per vertex
+        sizeof(float) * 3 * 3 * 3, // 3 vertices, 3 floats per vertex, 3 triangles
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // we will be writing to this buffer on the CPU, so we need to set this flag, the buffer is also host visible so it is not fast GPU memory
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
     mIndexBuffer = mVRDev->CreateBuffer(
         sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // same as above
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
-    // create a buffer for the vertices and copy the data to it
-    auto VertexBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 3 * 3, // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // we will be writing to this buffer on the CPU, so we need to set this flag, the buffer is also host visible so it is not fast GPU memory
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
-    auto IndexBuffer = mVRDev->CreateBuffer(
-        sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // same as above
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
+
 
     // upload the vertex data to the buffer, UpdateBuffer(...) will use mapping the buffer and memcpy 
     mVRDev->UpdateBuffer(mVertexBuffer, vertices1, sizeof(float) * 3 * 3); 
     mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); // same as above
-    mVRDev->UpdateBuffer(VertexBuffer, vertices2, sizeof(float) * 3 * 3);
-    mVRDev->UpdateBuffer(IndexBuffer, indices, sizeof(uint32_t) * 3); // same as above
+
+    mVRDev->UpdateBuffer(mVertexBuffer, vertices2, sizeof(float) * 3 * 3, sizeof(float) * 3 * 3); 
+    mVRDev->UpdateBuffer(mVertexBuffer, vertices3, sizeof(float) * 3 * 3, sizeof(float) * 3 * 3 * 2); 
+
 	// Create info struct for the BLAS
     vr::BLASCreateInfo blasCreateInfo = {};
     blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
@@ -98,8 +101,13 @@ void HelloTriangle::CreateAS()
     // NOTE: BLASCreateInfo can have multiple geometries and they are of type VkAccelerationStructureGeometryKHR
     blasCreateInfo.Geometries.push_back(geomData);
 
-    geomData.VertexDevAddress = VertexBuffer.DevAddress;
-    geomData.IndexDevAddress = IndexBuffer.DevAddress;
+    geomData.VertexDevAddress = mVertexBuffer.DevAddress + sizeof(float) * 3 * 3;
+    geomData.IndexDevAddress = mIndexBuffer.DevAddress;
+
+    blasCreateInfo.Geometries.push_back(geomData);
+
+    geomData.VertexDevAddress = mVertexBuffer.DevAddress + sizeof(float) * 3 * 3 * 2;
+
     blasCreateInfo.Geometries.push_back(geomData);
 
     // this only creates the BLAS, it does not build it
@@ -116,9 +124,10 @@ void HelloTriangle::CreateAS()
     auto [tlasHandle, tlasBuildInfo] = mVRDev->CreateTLAS(tlasCreateInfo);
 
     mTLASHandle = tlasHandle;
+    mTLASBuildInfo = tlasBuildInfo;
 
     // create a buffer for the instance data
-    auto instanceBuffer = mVRDev->CreateInstanceBuffer(1);
+    mInstanceBuffer = mVRDev->CreateInstanceBuffer(1);
 
     
 	//Specify the instance data
@@ -137,7 +146,7 @@ void HelloTriangle::CreateAS()
     };
 
     // upload the instance data to the buffer
-    mVRDev->UpdateBuffer(instanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
+    mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
 
     
@@ -150,7 +159,8 @@ void HelloTriangle::CreateAS()
     std::vector<vr::BLASBuildInfo> buildInfos = { blasBuildInfo };
     auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd);
 
-
+    mVRDev->AddAccelerationBuildBarrier(buildCmd);
+    mScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, mInstanceBuffer, 1, buildCmd);
 
     buildCmd.end();
 
@@ -163,25 +173,9 @@ void HelloTriangle::CreateAS()
     
     mDevice.waitIdle();
 
-    buildCmd.reset(vk::CommandBufferResetFlags());
-
-    buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-    auto TLASscratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, instanceBuffer, 1, buildCmd);
-
-    buildCmd.end();
-
-    mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-
-    mDevice.waitIdle();
-
 
     mVRDev->DestroyBuffer(BLASscratchBuffer);
-    mVRDev->DestroyBuffer(TLASscratchBuffer);
 
-    mVRDev->DestroyBuffer(VertexBuffer); // free the vertex buffer
-    mVRDev->DestroyBuffer(IndexBuffer); // free the index buffer
-
-    mVRDev->DestroyBuffer(instanceBuffer); // free the instance buffer
 
     // free the command buffer
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
@@ -359,6 +353,59 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.end();
 
+
+
+    auto inst = vk::AccelerationStructureInstanceKHR()
+        .setInstanceCustomIndex(0)
+		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress)
+		.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
+        .setMask(0xFF)
+        .setInstanceShaderBindingTableRecordOffset(0);
+
+    // set the transform matrix to identity
+    inst.transform = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, sinf(glfwGetTime())
+    };
+
+    // upload the instance data to the buffer
+    mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
+
+    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
+
+    buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    // build the AS
+    auto[tlasHandle, buildInfo] = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo);
+
+    mTLASHandle = tlasHandle;
+    mTLASBuildInfo = buildInfo;
+
+    // returns the same scratch buffer
+    mScratchBuffer = mVRDev->BuildTLAS(buildInfo, mInstanceBuffer, 1, buildCmd, &mScratchBuffer);
+
+    buildCmd.end();
+
+    // submit the command buffer and wait for it to finish
+    auto submitInfo = vk::SubmitInfo()
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&buildCmd);
+
+    mQueues.GraphicsQueue.submit(submitInfo, nullptr);
+    
+    mDevice.waitIdle();
+
+    std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
+    //acceleration structure at binding 0
+    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eAccelerationStructureKHR, 0));
+    mDescriptorSet.Items[0].pItems = &mTLASHandle.AccelerationStructure;
+    auto accelInfo = mDescriptorSet.Items[0].GetAccelerationStructureInfo(0);
+
+    descUpdate[0].setPNext(&accelInfo); // set the next pointer to the acceleration structure info
+    descUpdate[0].setDescriptorCount(1);
+    mVRDev->UpdateDescriptorSet(descUpdate);
+
     //wait for previous frame to finish, also resets the fence and command buffer that we are waiting for
     WaitForRendering();
 
@@ -374,6 +421,9 @@ void HelloTriangle::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     // destroy all the resources we created
+
+    mVRDev->DestroyBuffer(mInstanceBuffer);
+    mVRDev->DestroyBuffer(mScratchBuffer);
 
     mVRDev->DestroyBuffer(mUniformBuffer);
     mVRDev->DestroySBTBuffer(mSBTBuffer);
