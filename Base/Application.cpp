@@ -45,7 +45,7 @@ Application::Application()
     // builder.DeviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME); 
 
     // user can also enable extra features if they want to use them
-    // features from 1.0 to 1.3 are available 
+    // features from 1.0 to 1.2 are available 
     // builder.PhysicalDeviceFeatures12.bufferDeviceAddress = true;
     
     // Create the surface for the window

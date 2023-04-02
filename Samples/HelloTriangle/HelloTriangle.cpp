@@ -22,8 +22,8 @@ public:
     vr::AllocatedBuffer mIndexBuffer;
 
     
-    vr::ShaderBindingTable mSBT; // contains the raygen, miss and hit groups
-	vr::SBTBuffer mSBTBuffer; // contains the shader records for the SBT
+    vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
+	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
 
     vk::DescriptorPool mDescriptorPool = nullptr;
     vr::DescriptorSet mDescriptorSet;
@@ -37,35 +37,35 @@ public:
     vr::TLASHandle mTLASHandle;
     vr::TLASBuildInfo mTLASBuildInfo;
 
-    vr::AllocatedBuffer mInstanceBuffer;
-    vr::AllocatedBuffer mScratchBuffer;
-
 
 };
+
+void HelloTriangle::Start()
+{
+    //defined in the base application class, creates an output image to render to
+    CreateStoreImage();
+    
+    CreateAS();
+    
+    CreateRTPipeline();
+    UpdateDescriptorSet();
+
+}
 
 void HelloTriangle::CreateAS()
 {
     // vertex and index data for the triangle
-    float vertices1[] = {
-        -1.0f, 1.0f, 0.0f,
-        -3.0f, 1.0f, 0.0f,
-        -2.0f,  -1.0f, 0.0f
-    };
-    float vertices2[] = {
+
+    float vertices[] = {
         1.0f, 1.0f, 0.0f,
         -1.0f, 1.0f, 0.0f,
         0.0f,  -1.0f, 0.0f
-    };
-    float vertices3[] = {
-        3.0f, 1.0f, 0.0f,
-        1.0f, 1.0f, 0.0f,
-        2.0f,  -1.0f, 0.0f
     };
     uint32_t indices[] = { 0, 1, 2 };
 
     // create a buffer for the vertices and copy the data to it
     mVertexBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 3 * 3 * 3, // 3 vertices, 3 floats per vertex, 3 triangles
+        sizeof(float) * 3 * 3, // 3 vertices, 3 floats per vertex
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // we will be writing to this buffer on the CPU, so we need to set this flag, the buffer is also host visible so it is not fast GPU memory
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
     mIndexBuffer = mVRDev->CreateBuffer(
@@ -75,11 +75,9 @@ void HelloTriangle::CreateAS()
 
 
     // upload the vertex data to the buffer, UpdateBuffer(...) will use mapping the buffer and memcpy 
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices1, sizeof(float) * 3 * 3); 
-    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); // same as above
-
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices2, sizeof(float) * 3 * 3, sizeof(float) * 3 * 3); 
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices3, sizeof(float) * 3 * 3, sizeof(float) * 3 * 3 * 2); 
+    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
+    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); 
+    
 
 	// Create info struct for the BLAS
     vr::BLASCreateInfo blasCreateInfo = {};
@@ -101,14 +99,6 @@ void HelloTriangle::CreateAS()
     // NOTE: BLASCreateInfo can have multiple geometries and they are of type VkAccelerationStructureGeometryKHR
     blasCreateInfo.Geometries.push_back(geomData);
 
-    geomData.VertexDevAddress = mVertexBuffer.DevAddress + sizeof(float) * 3 * 3;
-    geomData.IndexDevAddress = mIndexBuffer.DevAddress;
-
-    blasCreateInfo.Geometries.push_back(geomData);
-
-    geomData.VertexDevAddress = mVertexBuffer.DevAddress + sizeof(float) * 3 * 3 * 2;
-
-    blasCreateInfo.Geometries.push_back(geomData);
 
     // this only creates the BLAS, it does not build it
 	// it creates acceleration structure and allocates memory for it and scratch memory
@@ -116,18 +106,18 @@ void HelloTriangle::CreateAS()
 
     mBLASHandle = blasHandle;
 
-
     // create a TLAS
     vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-    tlasCreateInfo.MaxInstanceCount = 1;
+    tlasCreateInfo.MaxInstanceCount = 1; // Max number of instances in the TLAS, when building the TLAS num of instances may be lower
+
     auto [tlasHandle, tlasBuildInfo] = mVRDev->CreateTLAS(tlasCreateInfo);
 
     mTLASHandle = tlasHandle;
     mTLASBuildInfo = tlasBuildInfo;
 
     // create a buffer for the instance data
-    mInstanceBuffer = mVRDev->CreateInstanceBuffer(1);
+    auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance
 
     
 	//Specify the instance data
@@ -146,21 +136,24 @@ void HelloTriangle::CreateAS()
     };
 
     // upload the instance data to the buffer
-    mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
+    mVRDev->UpdateBuffer(InstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
 
-    
     // create a command buffer to build the BLAS and TLAS, mGraphicsPool is a command pool that is created in the Base Application class
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
     // build the AS
-    std::vector<vr::BLASBuildInfo> buildInfos = { blasBuildInfo };
-    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd);
+    std::vector<vr::BLASBuildInfo> buildInfos = { blasBuildInfo }; // We can have multiple BLAS builds at once, but we only have one for now
 
-    mVRDev->AddAccelerationBuildBarrier(buildCmd);
-    mScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, mInstanceBuffer, 1, buildCmd);
+    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd); // Add build commands to command buffer and retrieve scratch buffer for the build 
+
+    mVRDev->AddAccelerationBuildBarrier(buildCmd); // Add a barrier to the command buffer to make sure the BLAS build is finished before the TLAS build starts
+
+    // Add build commands to command buffer and retrieve scratch buffer for the build
+    // We can reuse the scratch buffer from here to update the TLAS, but for now we don't update
+    auto TLASScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd); 
 
     buildCmd.end();
 
@@ -173,9 +166,13 @@ void HelloTriangle::CreateAS()
     
     mDevice.waitIdle();
 
+    // Destroy the scratch buffers, because the build is finished
+    // NOTE: We know the build is finished because we waited for the device to be idle, but in a real application we would use a fence or something else
+    mVRDev->DestroyBuffer(BLASscratchBuffer); 
+    mVRDev->DestroyBuffer(TLASScratchBuffer);
 
-    mVRDev->DestroyBuffer(BLASscratchBuffer);
-
+    // We don't need the instance buffer anymore, because the TLAS is built and we don't plan on updating it
+    mVRDev->DestroyBuffer(InstanceBuffer);
 
     // free the command buffer
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
@@ -200,22 +197,28 @@ void HelloTriangle::CreateRTPipeline()
 
     mDescriptorPool = mVRDev->CreateDescriptorPool(poolSizes, vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1);
 
-    // create a descriptor layout for the ray tracing pipeline
+
+    // vr::DescriptorSet is a wrapper to encapsulate all Descriptor related structs
+    // Now we create a descriptor layout for the ray tracing pipeline
     // last parameter is a pointer to the items vector, so we can use it later to create the descriptor set
     // for now we have only one item, so we just pass the address of the first element
+    // if we want to update the descriptor set later with another item,
+    // we can just reassign the vr::DescriptorItem::pItems with new items and update the descriptor set
    mDescriptorSet.Items = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.AccelerationStructure, vk::DescriptorBindingFlagBits::eUpdateAfterBind),
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.AccelerationStructure),
         vr::DescriptorItem(1, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImageView),
         vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer.Buffer),
     };
 
+
     mDescriptorSet.Layout = mVRDev->CreateDescriptorSetLayout(mDescriptorSet.Items); // create a descriptor set layout, for the ray tracing pipeline
+
+    
     // create shaders for the ray tracing pipeline
-    // user can also supply Spir-V bytecode directly in the info struct
-    // by filling vr::ShaderCreateInfo::SPIRVCode vector
+    // Spir-V bytecode is required in the info struct
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
-    FileRead(SHADER_DIR"/HelloTriangle.rgen.spv", shaderCreateInfo.SPIRVCode); // utility function to read a file into a vector
+    FileRead(SHADER_DIR"/HelloTriangle.rgen.spv", shaderCreateInfo.SPIRVCode); // FileRead(...) is a utility function to read a file into a vector
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
 
     // add the shader to the shader binding table which stores all the shaders for the pipeline
@@ -223,21 +226,25 @@ void HelloTriangle::CreateRTPipeline()
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
     FileRead(SHADER_DIR"/HelloTriangle.rmiss.spv", shaderCreateInfo.SPIRVCode);
-    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
+    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo)); // we can have multiple miss shaders
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     FileRead(SHADER_DIR"/HelloTriangle.rchit.spv", shaderCreateInfo.SPIRVCode);
 
-    //hit groups can contain multiple shaders, so there is another struct for it
+    //hit groups can contain multiple shaders, so there is another special struct for it
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
     mSBT.HitGroups.push_back(hitGroup);
-
+    
     // create the ray tracing pipeline
+
+    // Create a layout for the pipeline
     mPipelineLayout = mVRDev->CreatePipelineLayout(mDescriptorSet.Layout);
 
+    // create the ray tracing pipeline, a vk::Pipeline object
     mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
 
+    // Build the shader binding table, it is a buffer that contains the shaders for the pipeline and we can update hit record data if we want
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
 
     // create a descriptor set for the ray tracing pipeline
@@ -245,20 +252,11 @@ void HelloTriangle::CreateRTPipeline()
 
 }
 
-void HelloTriangle::Start()
-{
-    //defined in the base application class, creates an output image to render to
-    CreateStoreImage();
-    
-    CreateAS();
-    
-    CreateRTPipeline();
-    UpdateDescriptorSet();
 
-}
 void HelloTriangle::UpdateDescriptorSet()
 {
 
+    // Configure the camera for the scene 
     glm::vec3 loc = glm::vec3(0.0f, 0.0f, -2.5f);
     glm::vec3 forward = glm::vec3(0.0f, 0.0f, 1.0f) + loc;
 
@@ -271,33 +269,40 @@ void HelloTriangle::UpdateDescriptorSet()
     mVRDev->UpdateBuffer(mUniformBuffer, mats, size); // upload the data to the uniform buffer
 
     std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
-    //acceleration structure at binding 0
+    descUpdate.reserve(3);
+
+    //acceleration structure at binding 0, Look at Pipeline layout created earlier
+
     descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eAccelerationStructureKHR, 0));
-    auto accelInfo = mDescriptorSet.Items[0].GetAccelerationStructureInfo(0);
+
+    // Get*Info(...) returns an Info struct for the write descriptor struct with the respective vulkan object pointer stored in vr::DescriptorItem::pItems
+    // the first parameter in Get*Info(...) means the n:th item in the DescriptorItem::pItems pointer
+    // if the pointer is null for the item, the pointer of the item in the struct will be null
+    // NOTE: we already set the pointer to the vulkan objects before in CreateRTPipeline() | line 207, so we don't need to set it again
+    // if we were to update the descriptor with another object we would have to set a new pointer for vr::DescriptorItem::pItems
+    auto accelInfo = mDescriptorSet.Items[0].GetAccelerationStructureInfo(0); // get the acceleration structure info (vk::WriteDescriptorSetAccelerationStructureKHR)
     descUpdate[0].setPNext(&accelInfo); // set the next pointer to the acceleration structure info
-    descUpdate[0].setDescriptorCount(1);
+    descUpdate[0].setDescriptorCount(1); // we are updating only one descriptor
     
     //storage image at binding 1
     descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eStorageImage, 1));
-    // items[0] is the storage image, it is the 0th element from the pointer above when we created the descriptor item
-    auto imageInfo = mDescriptorSet.Items[1].GetImageInfo(0);
-    descUpdate[1].setPImageInfo(&imageInfo);
+    auto imageInfo = mDescriptorSet.Items[1].GetImageInfo(0); 
+    descUpdate[1].setPImageInfo(&imageInfo); // set the image info
     descUpdate[1].setDescriptorCount(1);
 
     //uniform buffer at binding 2
     descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eUniformBuffer, 2));
-    auto bufferInfo = mDescriptorSet.Items[2].GetBufferInfo(0);
-    descUpdate[2].setPBufferInfo(&bufferInfo);
+    auto bufferInfo = mDescriptorSet.Items[2].GetBufferInfo(0); 
+    descUpdate[2].setPBufferInfo(&bufferInfo); // set the buffer info
     descUpdate[2].setDescriptorCount(1);
     
-
     // update the descriptor set
     mVRDev->UpdateDescriptorSet(descUpdate);
 }
 
 void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 {
-
+    // begin the command buffer
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
 
@@ -309,8 +314,10 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
+    // bind the descriptor set for ray tracing
     renderCmd.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, mPipelineLayout, 0, 1, &mDescriptorSet.Set, 0, nullptr);
-    // ray tracing dispatch
+
+    // RAYTRACING INITIATING
     mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
 
     //transition the swapchain image to transfer dst optimal
@@ -327,7 +334,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    //copy the output image to the swapchain image
+    //blit the output image to the swapchain image
     renderCmd.blitImage(
         mOutputImage.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
@@ -351,60 +358,10 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
+    // end the command buffer
     renderCmd.end();
 
 
-
-    auto inst = vk::AccelerationStructureInstanceKHR()
-        .setInstanceCustomIndex(0)
-		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress)
-		.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
-        .setMask(0xFF)
-        .setInstanceShaderBindingTableRecordOffset(0);
-
-    // set the transform matrix to identity
-    inst.transform = {
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, sinf(glfwGetTime())
-    };
-
-    // upload the instance data to the buffer
-    mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
-
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
-
-    buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
-    // build the AS
-    auto[tlasHandle, buildInfo] = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo);
-
-    mTLASHandle = tlasHandle;
-    mTLASBuildInfo = buildInfo;
-
-    // returns the same scratch buffer
-    mScratchBuffer = mVRDev->BuildTLAS(buildInfo, mInstanceBuffer, 1, buildCmd, &mScratchBuffer);
-
-    buildCmd.end();
-
-    // submit the command buffer and wait for it to finish
-    auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
-
-    mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
-    mDevice.waitIdle();
-
-    std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
-    //acceleration structure at binding 0
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eAccelerationStructureKHR, 0));
-    mDescriptorSet.Items[0].pItems = &mTLASHandle.AccelerationStructure;
-    auto accelInfo = mDescriptorSet.Items[0].GetAccelerationStructureInfo(0);
-
-    descUpdate[0].setPNext(&accelInfo); // set the next pointer to the acceleration structure info
-    descUpdate[0].setDescriptorCount(1);
-    mVRDev->UpdateDescriptorSet(descUpdate);
 
     //wait for previous frame to finish, also resets the fence and command buffer that we are waiting for
     WaitForRendering();
@@ -420,11 +377,8 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 void HelloTriangle::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
+    
     // destroy all the resources we created
-
-    mVRDev->DestroyBuffer(mInstanceBuffer);
-    mVRDev->DestroyBuffer(mScratchBuffer);
-
     mVRDev->DestroyBuffer(mUniformBuffer);
     mVRDev->DestroySBTBuffer(mSBTBuffer);
     mVRDev->DestroyShader(mSBT.RayGenShader);
