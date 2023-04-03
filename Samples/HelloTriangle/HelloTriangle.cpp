@@ -3,7 +3,7 @@
 #include "Application.h"
 #include "FileRead.h"
 
-class HelloTriangle : public Application
+class DynamicBLAS : public Application
 {
 public:
     virtual void Start() override;
@@ -35,12 +35,11 @@ public:
 
     vr::BLASHandle mBLASHandle;
     vr::TLASHandle mTLASHandle;
-    vr::TLASBuildInfo mTLASBuildInfo;
 
 
 };
 
-void HelloTriangle::Start()
+void DynamicBLAS::Start()
 {
     //defined in the base application class, creates an output image to render to
     CreateStoreImage();
@@ -52,7 +51,7 @@ void HelloTriangle::Start()
 
 }
 
-void HelloTriangle::CreateAS()
+void DynamicBLAS::CreateAS()
 {
     // vertex and index data for the triangle
 
@@ -78,11 +77,11 @@ void HelloTriangle::CreateAS()
     mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
     mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); 
     
-
 	// Create info struct for the BLAS
     vr::BLASCreateInfo blasCreateInfo = {};
     blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
     
+    // [POI]
 	// triangle geometry data, BLASCreateInfo can have multiple geometries
     vr::GeometryData geomData = {};
 
@@ -92,20 +91,20 @@ void HelloTriangle::CreateAS()
     geomData.PrimitiveCount = 1;
     geomData.VertexDevAddress = mVertexBuffer.DevAddress;
     geomData.IndexDevAddress = mIndexBuffer.DevAddress;
-	//Helper Function: vr::FillBottomAccelGeometry(...) takes vr::GeometryData and converts it to a VkAccelerationStructureGeometryKHR struct that is required
-	//by vr::BLASCreateInfo. Vertex, index and optionally transform buffers are  required for this function
 	
     // add triangle geometry to the BLAS create info
     // NOTE: BLASCreateInfo can have multiple geometries and they are of type VkAccelerationStructureGeometryKHR
     blasCreateInfo.Geometries.push_back(geomData);
 
 
+    // [POI]
     // this only creates the BLAS, it does not build it
 	// it creates acceleration structure and allocates memory for it and scratch memory
     auto[blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
     mBLASHandle = blasHandle;
 
+    // [POI]
     // create a TLAS
     vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
@@ -114,7 +113,6 @@ void HelloTriangle::CreateAS()
     auto [tlasHandle, tlasBuildInfo] = mVRDev->CreateTLAS(tlasCreateInfo);
 
     mTLASHandle = tlasHandle;
-    mTLASBuildInfo = tlasBuildInfo;
 
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance
@@ -135,6 +133,7 @@ void HelloTriangle::CreateAS()
             0.0f, 0.0f, 1.0f, 0.0f
     };
 
+    // [POI]
     // upload the instance data to the buffer
     mVRDev->UpdateBuffer(InstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
@@ -143,6 +142,8 @@ void HelloTriangle::CreateAS()
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    // [POI]
 
     // build the AS
     std::vector<vr::BLASBuildInfo> buildInfos = { blasBuildInfo }; // We can have multiple BLAS builds at once, but we only have one for now
@@ -179,7 +180,7 @@ void HelloTriangle::CreateAS()
 }
 
 
-void HelloTriangle::CreateRTPipeline()
+void DynamicBLAS::CreateRTPipeline()
 {
     // create a uniform buffer
     mUniformBuffer = mVRDev->CreateBuffer(
@@ -198,6 +199,7 @@ void HelloTriangle::CreateRTPipeline()
     mDescriptorPool = mVRDev->CreateDescriptorPool(poolSizes, vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1);
 
 
+    // [POI]
     // vr::DescriptorSet is a wrapper to encapsulate all Descriptor related structs
     // Now we create a descriptor layout for the ray tracing pipeline
     // last parameter is a pointer to the items vector, so we can use it later to create the descriptor set
@@ -231,6 +233,7 @@ void HelloTriangle::CreateRTPipeline()
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     FileRead(SHADER_DIR"/HelloTriangle.rchit.spv", shaderCreateInfo.SPIRVCode);
 
+    // [POI]
     //hit groups can contain multiple shaders, so there is another special struct for it
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
@@ -244,6 +247,7 @@ void HelloTriangle::CreateRTPipeline()
     // create the ray tracing pipeline, a vk::Pipeline object
     mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
 
+    // [POI]
     // Build the shader binding table, it is a buffer that contains the shaders for the pipeline and we can update hit record data if we want
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
 
@@ -253,7 +257,7 @@ void HelloTriangle::CreateRTPipeline()
 }
 
 
-void HelloTriangle::UpdateDescriptorSet()
+void DynamicBLAS::UpdateDescriptorSet()
 {
 
     // Configure the camera for the scene 
@@ -272,9 +276,9 @@ void HelloTriangle::UpdateDescriptorSet()
     descUpdate.reserve(3);
 
     //acceleration structure at binding 0, Look at Pipeline layout created earlier
-
     descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eAccelerationStructureKHR, 0));
 
+    // [POI]
     // Get*Info(...) returns an Info struct for the write descriptor struct with the respective vulkan object pointer stored in vr::DescriptorItem::pItems
     // the first parameter in Get*Info(...) means the n:th item in the DescriptorItem::pItems pointer
     // if the pointer is null for the item, the pointer of the item in the struct will be null
@@ -300,7 +304,7 @@ void HelloTriangle::UpdateDescriptorSet()
     mVRDev->UpdateDescriptorSet(descUpdate);
 }
 
-void HelloTriangle::Update(vk::CommandBuffer renderCmd)
+void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 {
     // begin the command buffer
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
@@ -317,6 +321,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     // bind the descriptor set for ray tracing
     renderCmd.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, mPipelineLayout, 0, 1, &mDescriptorSet.Set, 0, nullptr);
 
+    // [POI]
     // RAYTRACING INITIATING
     mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
 
@@ -334,6 +339,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
+    // [POI]
     //blit the output image to the swapchain image
     renderCmd.blitImage(
         mOutputImage.Image, vk::ImageLayout::eTransferSrcOptimal,
@@ -374,7 +380,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 }
 
 
-void HelloTriangle::Stop()
+void DynamicBLAS::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
@@ -403,7 +409,7 @@ int main()
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new HelloTriangle();
+	Application* app = new DynamicBLAS();
 
     app->Start();
     app->Run();

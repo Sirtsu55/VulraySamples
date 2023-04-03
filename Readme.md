@@ -20,3 +20,4 @@ to see what is declared there and [Apllication.cpp](https://github.com/Sirtsu55/
 - Samples have helper functions to spit the code
 
 ### Go and look at the samples...
+- Points of Intrest are marked by ```[POI]``` in the Samples
