@@ -29,6 +29,7 @@ link_libraries(Vulray glfw)
 add_compile_definitions(SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
 
 add_subdirectory("Samples/HelloTriangle")
+add_subdirectory("Samples/DynamicBLAS")
 
 
 
