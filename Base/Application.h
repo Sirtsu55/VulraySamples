@@ -1,5 +1,8 @@
 #pragma once
 #include <GLFW/glfw3.h>
+#include "SimpleTimer.h"
+#include "Camera.h"
+
 class Application
 {
 public:
@@ -22,6 +25,8 @@ public:
 	void Present(vk::CommandBuffer commandBuffer);
 
 	void CreateBaseResources();
+
+	void UpdateCamera();
 
 protected:
 
@@ -56,5 +61,15 @@ protected:
 
 
 	vr::AllocatedBuffer mCameraUniformBuffer = {};
+
+	Camera mCamera;
+
+	glm::dvec2 mMousePos = { 0.0f, 0.0f };
+	glm::dvec2 mMouseDelta = { 0.0f, 0.0f };
+
+	float DeltaTime = 0.0f;
+
+	
+	SimpleTimer mFrameTimer;
 };
 	

@@ -125,7 +125,8 @@ void Application::Stop()
 
 void Application::BeginFrame()
 {
-
+    DeltaTime = mFrameTimer.Endd();
+    mFrameTimer.Start();
     //Acquire the next image
     auto result = mDevice.acquireNextImageKHR(mSwapchainStructs.SwapchainHandle, UINT64_MAX, mRenderSemaphore, nullptr);
 
@@ -223,6 +224,48 @@ void Application::CreateBaseResources()
         vk::BufferUsageFlagBits::eUniformBuffer); // its a uniform buffer
 }
 
+void Application::UpdateCamera()
+{
+    glm::dvec2 lastMousePos = mMousePos;
+
+    glfwGetCursorPos(mWindow, &mMousePos.x, &mMousePos.y);
+
+    // normalize the mouse position
+    glm::dvec2 delta = (mMousePos - lastMousePos) / glm::dvec2(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height);
+
+    if(glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        if(delta.x || delta.y)
+            mCamera.Rotate(-delta.y * DeltaTime, delta.x * DeltaTime, 0);
+    }
+    if(glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        mCamera.MoveForward(DeltaTime);
+    }
+    if(glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        mCamera.MoveForward(-DeltaTime);
+    }
+    if(glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        mCamera.MoveRight(DeltaTime);
+    }
+    if(glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS)
+    {
+        mCamera.MoveRight(-DeltaTime);
+    }
+
+
+
+    glm::mat4 view = mCamera.GetViewMatrix();
+
+    glm::mat4 proj = mCamera.GetProjectionMatrix(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height);
+
+    //update the view matrix
+    glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
+    auto size = sizeof(glm::mat4) * 2;
+    mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size);     
+}
 
 void Application::Run()
 {

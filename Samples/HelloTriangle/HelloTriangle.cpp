@@ -262,20 +262,10 @@ void HelloTriangle::CreateRTPipeline()
 
 void HelloTriangle::UpdateDescriptorSet()
 {
+    // Set the camera position
+    // movement, rotation and input is handled by the Application Base class and we can modify the camera values as we like
+    mCamera.Pos = glm::vec3(0.0f, 0.0f, 2.5f);
 
-    // Configure the camera for the scene 
-    glm::vec3 loc = glm::vec3(0.0f, 0.0f, -2.5f);
-    glm::vec3 forward = glm::vec3(0.0f, 0.0f, 1.0f) + loc;
-
-    glm::mat4 view = glm::lookAt(loc, forward, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)mWidth / (float)(mHeight), 0.1f, 512.0f);
-
-    //uniform buffer contains the inverse view and projection matrices
-    glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
-    auto size = sizeof(glm::mat4) * 2;
-
-    // The camera uniform buffer was created by the Base application class to fit 2 matrices, so we can just update it
-    mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size); // upload the data to the uniform buffer
 
     std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
     descUpdate.reserve(3);
@@ -299,7 +289,7 @@ void HelloTriangle::UpdateDescriptorSet()
     descUpdate[1].setPImageInfo(&imageInfo); // set the image info
     descUpdate[1].setDescriptorCount(1);
 
-    //uniform buffer at binding 2
+    //uniform buffer at binding 2, This is the camera buffer and it gets updated every frame in the base class
     descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eUniformBuffer, 2));
     auto bufferInfo = mDescriptorSet.Items[2].GetBufferInfo(0); 
     descUpdate[2].setPBufferInfo(&bufferInfo); // set the buffer info
@@ -380,7 +370,8 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     //this function will submit the command buffer to the queue and present the image to the screen
     Present(renderCmd);
 
-
+    // update the camera, UpdateCamera() function handles the uniform buffer for the camera and the camera movement
+    UpdateCamera();
 
 }
 

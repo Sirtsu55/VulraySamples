@@ -163,15 +163,19 @@ void DynamicBLAS::CreateAS()
 
 void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 {
-    // modify the top middle vertex of the triangle
-    float new_vertex_pos[3] = {0.0f, 0.0f, sinf(glfwGetTime())};
+    // modify the triangle
+    float vertices[] = {
+        1.0f, 1.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f,
+        0.0f, sinf(glfwGetTime()) - 1.0f, 0.0f
+    };
 
     // [POI] Additional Info
     // Vulkan requires the whole buffer with same size and the same number of primitives as the source BLAS, so if you want to update only one primitive, 
     // you still have to give vulkan the whole buffer, not parts that you want to update
 
-    //offset the vertex buffer by 2 triangles and write new vertices, because we only want to update the top middle vertex, which is triangle 3
-    mVRDev->UpdateBuffer(mVertexBuffer, new_vertex_pos, sizeof(float) * 3, sizeof(float) * 3 * 2);
+    //Update the vertex buffer
+    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
 
     // [POI] set the BLAS to update
     vr::BLASUpdateInfo updateInfo = {};
@@ -267,17 +271,7 @@ void DynamicBLAS::CreateRTPipeline()
 void DynamicBLAS::UpdateDescriptorSet()
 {
 
-    // Configure the camera for the scene 
-    glm::vec3 loc = glm::vec3(0.0f, 0.0f, -2.5f);
-    glm::vec3 forward = glm::vec3(0.0f, 0.0f, 1.0f) + loc;
-
-    glm::mat4 view = glm::lookAt(loc, forward, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)mWidth / (float)(mHeight), 0.001f, 10000.0f);
-
-    //uniform buffer contains the inverse view and projection matrices
-    glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
-    auto size = sizeof(glm::mat4) * 2;
-    mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size); 
+    mCamera.Pos = glm::vec3(0.0f, 0.0f, 5.0f);
 
     std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
     descUpdate.reserve(3);
@@ -362,6 +356,7 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 
     Present(renderCmd);
 
+    UpdateCamera();
 }
 
 
