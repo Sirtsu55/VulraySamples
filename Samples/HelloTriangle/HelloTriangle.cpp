@@ -2,6 +2,7 @@
 #include "Common.h"
 #include "Application.h"
 #include "FileRead.h"
+#include "ShaderCompiler.h"
 
 class HelloTriangle : public Application
 {
@@ -17,7 +18,8 @@ public:
 
 public:
     
-
+    ShaderCompiler mShaderCompiler;
+    
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
@@ -30,9 +32,6 @@ public:
     vk::Pipeline mRTPipeline = nullptr;
     vk::PipelineLayout mPipelineLayout = nullptr;
 
-
-    vr::AllocatedBuffer mUniformBuffer;
-
     vr::BLASHandle mBLASHandle;
     vr::TLASHandle mTLASHandle;
 
@@ -41,8 +40,8 @@ public:
 
 void HelloTriangle::Start()
 {
-    //defined in the base application class, creates an output image to render to
-    CreateStoreImage();
+    //defined in the base application class, creates an output image to render to and a camera uniform buffer
+    CreateBaseResources();
     
     CreateAS();
     
@@ -182,12 +181,6 @@ void HelloTriangle::CreateAS()
 
 void HelloTriangle::CreateRTPipeline()
 {
-    // create a uniform buffer
-    mUniformBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 4 * 4 * 2, // two 4x4 matrix
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // we will be writing to this buffer on the CPU
-        vk::BufferUsageFlagBits::eUniformBuffer); // its a uniform buffer
-
 
     // create a descriptor pool
     std::vector<vk::DescriptorPoolSize> poolSizes = {
@@ -209,7 +202,7 @@ void HelloTriangle::CreateRTPipeline()
    mDescriptorSet.Items = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.AccelerationStructure),
         vr::DescriptorItem(1, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImageView),
-        vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer.Buffer),
+        vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer.Buffer),
     };
 
 
@@ -219,24 +212,34 @@ void HelloTriangle::CreateRTPipeline()
     // create shaders for the ray tracing pipeline
     // Spir-V bytecode is required in the info struct
 
-    vr::ShaderCreateInfo shaderCreateInfo = {};
-    FileRead(SHADER_DIR"/HelloTriangle.rgen.spv", shaderCreateInfo.SPIRVCode); // FileRead(...) is a utility function to read a file into a vector
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
 
+    vr::ShaderCreateInfo shaderCreateInfo = {};
+
+    VULRAY_LOG_INFO("Compiling Shaders");
+
+    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
+    // Shader compiler class from from Base/ will perform GLSL -> SPIR-V translation, it takes about 1 second to compile the three shaders
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rgen"));
     // add the shader to the shader binding table which stores all the shaders for the pipeline
     mSBT.RayGenShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
+
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
-    FileRead(SHADER_DIR"/HelloTriangle.rmiss.spv", shaderCreateInfo.SPIRVCode);
-    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo)); // we can have multiple miss shaders
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rmiss"));
+    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
+
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-    FileRead(SHADER_DIR"/HelloTriangle.rchit.spv", shaderCreateInfo.SPIRVCode);
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rchit"));
+
+    VULRAY_LOG_INFO("Shaders Compiled");
 
     // [POI]
     //hit groups can contain multiple shaders, so there is another special struct for it
     vr::HitGroup hitGroup = {};
+
     hitGroup.ClosestHitShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
+
     mSBT.HitGroups.push_back(hitGroup);
     
     // create the ray tracing pipeline
@@ -270,7 +273,9 @@ void HelloTriangle::UpdateDescriptorSet()
     //uniform buffer contains the inverse view and projection matrices
     glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
     auto size = sizeof(glm::mat4) * 2;
-    mVRDev->UpdateBuffer(mUniformBuffer, mats, size); // upload the data to the uniform buffer
+
+    // The camera uniform buffer was created by the Base application class to fit 2 matrices, so we can just update it
+    mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size); // upload the data to the uniform buffer
 
     std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
     descUpdate.reserve(3);
@@ -385,7 +390,6 @@ void HelloTriangle::Stop()
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
     // destroy all the resources we created
-    mVRDev->DestroyBuffer(mUniformBuffer);
     mVRDev->DestroySBTBuffer(mSBTBuffer);
     mVRDev->DestroyShader(mSBT.RayGenShader);
     mVRDev->DestroyShader(mSBT.MissShaders[0]);

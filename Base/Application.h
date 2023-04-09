@@ -21,7 +21,7 @@ public:
 
 	void Present(vk::CommandBuffer commandBuffer);
 
-	void CreateStoreImage();
+	void CreateBaseResources();
 
 protected:
 
@@ -53,5 +53,8 @@ protected:
 
     std::vector<vk::CommandBuffer> mRTRenderCmd; // one recording and one pending
     uint32_t mRTRenderCmdIndex = 0;
+
+
+	vr::AllocatedBuffer mCameraUniformBuffer = {};
 };
 	

@@ -189,7 +189,7 @@ void Application::Present(vk::CommandBuffer commandBuffer)
 
 }
 
-void Application::CreateStoreImage()
+void Application::CreateBaseResources()
 {
     // Create an image to render to
     auto imageCreateInfo = vk::ImageCreateInfo()
@@ -215,6 +215,12 @@ void Application::CreateStoreImage()
         .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
     mOutputImageView = mDevice.createImageView(viewCreateInfo);
+
+    // create a uniform buffer
+    mCameraUniformBuffer = mVRDev->CreateBuffer(
+        sizeof(float) * 4 * 4 * 2, // two 4x4 matrix
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // we will be writing to this buffer on the CPU
+        vk::BufferUsageFlagBits::eUniformBuffer); // its a uniform buffer
 }
 
 
@@ -230,8 +236,10 @@ void Application::Run()
 
 Application::~Application()
 {
-
-    mVRDev->DestroyImage(mOutputImage);
+    if(mCameraUniformBuffer.Buffer)
+        mVRDev->DestroyBuffer(mCameraUniformBuffer);
+    if(mOutputImage.Image)
+        mVRDev->DestroyImage(mOutputImage);
 
     //Clean up
     delete mVRDev;

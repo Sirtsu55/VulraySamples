@@ -2,7 +2,7 @@
 #include "Common.h"
 #include "Application.h"
 #include "FileRead.h"
-
+#include "ShaderCompiler.h"
 
 
 class DynamicBLAS : public Application
@@ -20,12 +20,12 @@ public:
     void UpdateBLAS(vk::CommandBuffer cmd);
 
 public:
-    
+
+    ShaderCompiler mShaderCompiler;
 
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
-    
     vr::ShaderBindingTable mSBT;    
 	vr::SBTBuffer mSBTBuffer;      
 
@@ -33,9 +33,6 @@ public:
     vr::DescriptorSet mDescriptorSet;
     vk::Pipeline mRTPipeline = nullptr;
     vk::PipelineLayout mPipelineLayout = nullptr;
-
-
-    vr::AllocatedBuffer mUniformBuffer;
 
     vr::BLASHandle mBLASHandle;
 
@@ -51,7 +48,7 @@ public:
 
 void DynamicBLAS::Start()
 {
-    CreateStoreImage();
+    CreateBaseResources();
     
     CreateAS();
     
@@ -119,7 +116,7 @@ void DynamicBLAS::CreateAS()
     auto inst = vk::AccelerationStructureInstanceKHR()
         .setInstanceCustomIndex(0)
 		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress)
-		.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
+		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
         .setMask(0xFF)
         .setInstanceShaderBindingTableRecordOffset(0);
 
@@ -167,8 +164,7 @@ void DynamicBLAS::CreateAS()
 void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 {
     // modify the top middle vertex of the triangle
-    float new_vertex_pos[3] = {0.0f, -1.0f, sinf(glfwGetTime())};
-    // float new_vertex_pos[3] = {0.0f, 1.0f, sinf(glfwGetTime())};
+    float new_vertex_pos[3] = {0.0f, 0.0f, sinf(glfwGetTime())};
 
     // [POI] Additional Info
     // Vulkan requires the whole buffer with same size and the same number of primitives as the source BLAS, so if you want to update only one primitive, 
@@ -208,12 +204,6 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 
 void DynamicBLAS::CreateRTPipeline()
 {
-    // create a uniform buffer
-    mUniformBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 4 * 4 * 2,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eUniformBuffer); 
-
 
     // create a descriptor pool
     std::vector<vk::DescriptorPoolSize> poolSizes = {
@@ -228,7 +218,7 @@ void DynamicBLAS::CreateRTPipeline()
    mDescriptorSet.Items = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.AccelerationStructure),
         vr::DescriptorItem(1, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImageView),
-        vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer.Buffer),
+        vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer.Buffer),
     };
 
 
@@ -238,17 +228,23 @@ void DynamicBLAS::CreateRTPipeline()
     // create shaders for the ray tracing pipeline
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
-    FileRead(SHADER_DIR"/HelloTriangle.rgen.spv", shaderCreateInfo.SPIRVCode);
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
 
+    VULRAY_LOG_INFO("Compiling Shaders");
+
+    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rgen"));
     mSBT.RayGenShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
+
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
-    FileRead(SHADER_DIR"/HelloTriangle.rmiss.spv", shaderCreateInfo.SPIRVCode);
-    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo)); 
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rmiss"));
+    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
+
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-    FileRead(SHADER_DIR"/HelloTriangle.rchit.spv", shaderCreateInfo.SPIRVCode);
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rchit"));
+
+    VULRAY_LOG_INFO("Shaders Compiled");
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
@@ -276,12 +272,12 @@ void DynamicBLAS::UpdateDescriptorSet()
     glm::vec3 forward = glm::vec3(0.0f, 0.0f, 1.0f) + loc;
 
     glm::mat4 view = glm::lookAt(loc, forward, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)mWidth / (float)(mHeight), 0.1f, 512.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)mWidth / (float)(mHeight), 0.001f, 10000.0f);
 
     //uniform buffer contains the inverse view and projection matrices
     glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
     auto size = sizeof(glm::mat4) * 2;
-    mVRDev->UpdateBuffer(mUniformBuffer, mats, size); 
+    mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size); 
 
     std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
     descUpdate.reserve(3);
@@ -366,10 +362,6 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 
     Present(renderCmd);
 
-
-
-
-
 }
 
 
@@ -380,7 +372,6 @@ void DynamicBLAS::Stop()
     mVRDev->DestroyBuffer(mUpdateScratchBuffer);
 
     // destroy all the resources we created
-    mVRDev->DestroyBuffer(mUniformBuffer);
     mVRDev->DestroySBTBuffer(mSBTBuffer);
     mVRDev->DestroyShader(mSBT.RayGenShader);
     mVRDev->DestroyShader(mSBT.MissShaders[0]);

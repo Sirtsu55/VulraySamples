@@ -20,6 +20,16 @@ bool FileRead(const std::string& filePath, std::vector<T>& outVector)
 	}
 
 	size_t fileSize = (size_t)file.tellg();
+	
+	uint32_t outVectorSize = 0;
+
+	// if the file size is not a multiple of the size of the type, we need to add one to the size of the vector,
+	// so in the case of a vector of uint32_t, if the file size is 5 bytes we need a vector of size 2 of uint32_t, which is 8 bytes
+	
+	if(fileSize % sizeof(T) != 0)
+		outVectorSize = (fileSize / sizeof(T)) + 1;
+	else
+		outVectorSize = fileSize / sizeof(T);
 
 	outVector.resize(fileSize / sizeof(T));
 

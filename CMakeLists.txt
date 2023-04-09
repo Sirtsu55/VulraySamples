@@ -4,9 +4,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project("VulraySamples")
 
-find_package(Vulkan REQUIRED)
-
-
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
 
 #add 3rd party libraries
 
@@ -23,9 +21,9 @@ include_directories(
 	)
 	
 link_directories("Vulray" "Vendor/glfw/src")
-	
-link_libraries(Vulray glfw)
-	
+
+
+link_libraries(Vulray glfw Vulkan::shaderc_combined)
 add_compile_definitions(SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
 
 add_subdirectory("Samples/HelloTriangle")

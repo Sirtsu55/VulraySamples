@@ -4,7 +4,7 @@
 
 file(GLOB_RECURSE APP_BASE_SRC "${PROJECT_SOURCE_DIR}/Base/*.cpp")
 
-add_executable( "DynamicBLAS"
+add_executable("DynamicBLAS"
 	${APP_BASE_SRC}	 # base app code
 	DynamicBLAS.cpp)
 

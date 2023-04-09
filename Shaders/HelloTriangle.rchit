@@ -5,12 +5,8 @@
 layout(location = 0) rayPayloadInEXT vec3 hitValue;
 hitAttributeEXT vec2 attribs;
 
-layout(shaderRecordEXT) buffer SBTData {
-    vec3 color;
-};
-
 void main()
 {
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-  hitValue = vec3(color);
+  hitValue = barycentricCoords;
 }
