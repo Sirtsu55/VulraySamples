@@ -28,8 +28,8 @@ public:
 
 
 private:
-	std::chrono::steady_clock::time_point StartTime;
-	std::chrono::steady_clock::time_point EndTime;
+	std::chrono::system_clock::time_point StartTime;
+	std::chrono::system_clock::time_point EndTime;
 };
 double GetElapsedSeconds();
 

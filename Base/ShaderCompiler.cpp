@@ -47,7 +47,7 @@ std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const vk::ShaderSta
     //Check if the compilation was successful
     if (result.GetCompilationStatus() != shaderc_compilation_status_success)
     {
-        VULRAY_LOG_ERROR("Failed to compile shader: {0}", result.GetErrorMessage());
+        VULRAY_FLOG_ERROR("Failed to compile shader: {0}", result.GetErrorMessage());
         return std::vector<uint32_t>();
     }
     const uint32_t* spirv = result.cbegin();
