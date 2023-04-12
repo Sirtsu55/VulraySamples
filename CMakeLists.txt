@@ -24,7 +24,6 @@ link_directories("Vulray" "Vendor/glfw/src")
 
 
 link_libraries(Vulray glfw Vulkan::shaderc_combined)
-add_compile_definitions(SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
 
 add_subdirectory("Samples/HelloTriangle")
 add_subdirectory("Samples/DynamicBLAS")

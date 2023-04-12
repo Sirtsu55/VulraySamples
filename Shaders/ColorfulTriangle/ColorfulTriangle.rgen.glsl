@@ -1,13 +1,15 @@
 #version 460
+
+
 #extension GL_EXT_ray_tracing : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "../Common/Utils.glsl"
+
 
 layout(binding = 2, set = 0, rgba8) uniform image2D image;
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, set = 0) uniform CameraProperties 
-{
-	mat4 viewInverse;
-	mat4 projInverse;
-} cam;
+layout(binding = 1, set = 0) uniform CameraProperties cam;
 
 layout(location = 0) rayPayloadEXT vec3 hitValue;
 

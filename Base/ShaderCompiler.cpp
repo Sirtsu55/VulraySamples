@@ -33,17 +33,34 @@ ShaderCompiler::ShaderCompiler()
 
 std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const vk::ShaderStageFlagBits stage, const std::vector<char>& source)
 {
-    
-    //Compile the shader
-    shaderc::SpvCompilationResult result = mCompiler.CompileGlslToSpv(
+    // Preprocess the shader
+
+    shaderc::PreprocessedSourceCompilationResult pre_result = mCompiler.PreprocessGlsl(
         source.data(),
         source.size(),
+        GetShaderKindFromShaderStage(stage),
+        "Shader",
+        mOptions
+    );
+
+    if (pre_result.GetCompilationStatus() != shaderc_compilation_status_success)
+    {
+        VULRAY_FLOG_ERROR("Failed to preprocess shader: {0}", pre_result.GetErrorMessage());
+        return std::vector<uint32_t>();
+    }
+
+    uint32_t preprocessed_size = pre_result.end() - pre_result.begin(); // char* arithmetic, so this is the size of the preprocessed source in bytes
+
+    // Compile the shader
+    shaderc::SpvCompilationResult result = mCompiler.CompileGlslToSpv(
+        pre_result.begin(),
+        preprocessed_size,
         GetShaderKindFromShaderStage(stage),
         "Shader",
         "main",
         mOptions
     );
-
+    
     //Check if the compilation was successful
     if (result.GetCompilationStatus() != shaderc_compilation_status_success)
     {

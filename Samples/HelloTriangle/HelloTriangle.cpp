@@ -213,18 +213,18 @@ void HelloTriangle::CreateRTPipeline()
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
     // Shader compiler class from from Base/ will perform GLSL -> SPIR-V translation, it takes about 1 second to compile the three shaders
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rgen"));
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/ColorfulTriangle/ColorfulTriangle.rgen.glsl"));
     // add the shader to the shader binding table which stores all the shaders for the pipeline
     mSBT.RayGenShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rmiss"));
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/ColorfulTriangle/ColorfulTriangle.rmiss.glsl"));
     mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
 
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rchit"));
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/ColorfulTriangle/ColorfulTriangle.rchit.glsl"));
 
     VULRAY_LOG_INFO("Shaders Compiled");
 

@@ -229,17 +229,17 @@ void DynamicBLAS::CreateRTPipeline()
     VULRAY_LOG_INFO("Compiling Shaders");
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rgen"));
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, "Shaders/ColorfulTriangle/ColorfulTriangle.rgen.glsl"));
     mSBT.RayGenShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rmiss"));
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, "Shaders/ColorfulTriangle/ColorfulTriangle.rmiss.glsl"));
     mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
 
 
     shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/HelloTriangle.rchit"));
+    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, "Shaders/ColorfulTriangle/ColorfulTriangle.rchit.glsl"));
 
     VULRAY_LOG_INFO("Shaders Compiled");
 

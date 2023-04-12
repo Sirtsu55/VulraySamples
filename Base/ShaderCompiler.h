@@ -15,7 +15,6 @@ private:
 
     shaderc::Compiler mCompiler = {};
     shaderc::CompileOptions mOptions = {};
-
 };
 
 
