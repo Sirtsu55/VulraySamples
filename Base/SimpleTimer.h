@@ -28,8 +28,16 @@ public:
 
 
 private:
+
+	// msvc and gcc return different types for high_resolution_clock::now()
+#ifdef _WIN32
+	std::chrono::steady_clock::time_point StartTime;
+	std::chrono::steady_clock::time_point EndTime;
+#else
 	std::chrono::system_clock::time_point StartTime;
 	std::chrono::system_clock::time_point EndTime;
+#endif
+
 };
 double GetElapsedSeconds();
 

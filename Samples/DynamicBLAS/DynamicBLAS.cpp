@@ -276,8 +276,8 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 
     UpdateBLAS(renderCmd);
 
-    auto bufferIndices = mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
-    mVRDev->BindDescriptorSet(mPipelineLayout, 0, bufferIndices[0], 0, renderCmd);
+    mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
 
     mVRDev->TransitionImageLayout(
         mOutputImageBuffer.Image,

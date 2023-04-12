@@ -275,12 +275,17 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
 
-    auto bufferIndices = mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
 
     // set offsets for the descriptor set
 
-    // 0th set binds to the 0th buffer which is the resource descriptor buffer
-    mVRDev->BindDescriptorSet(mPipelineLayout, 0, bufferIndices[0], 0, renderCmd);
+    // if we have an array of buffer indices, we can set the offsets for each set here
+    // set + n binds to the nth buffer we bound in BindDescriptorBuffer(...) and the nth offset in the offsets vector
+    //  mVRDev->BindDescriptorSet(mPipelineLayout, 1st set, bufferindices vector, offsets vector, renderCmd);
+    // look at vkCmdSetDescriptorBufferOffsetsEXT in the vulkan spec for more info
+    // right now we only have one set bound at 0, so we just pass 0
+    // 0th set binds to the 0th buffer we bound in BindDescriptorBuffer(...) which is the resource descriptor buffer and we don't have any offsets
+    mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
 
     //transition the output image to general layout for ray tracing
     mVRDev->TransitionImageLayout(
