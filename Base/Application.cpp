@@ -206,16 +206,16 @@ void Application::CreateBaseResources()
         .setInitialLayout(vk::ImageLayout::eUndefined);
     
     // create the image with dedicated memory
-    mOutputImage = mVRDev->CreateImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
+    mOutputImageBuffer = mVRDev->CreateImage(imageCreateInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
 
     // create a view for the image
     auto viewCreateInfo = vk::ImageViewCreateInfo()
-        .setImage(mOutputImage.Image)
+        .setImage(mOutputImageBuffer.Image)
         .setViewType(vk::ImageViewType::e2D)
         .setFormat(vk::Format::eR8G8B8A8Unorm)
         .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
-    mOutputImageView = mDevice.createImageView(viewCreateInfo);
+    mOutputImage.View = mDevice.createImageView(viewCreateInfo);
 
     // create a uniform buffer
     mCameraUniformBuffer = mVRDev->CreateBuffer(
@@ -281,8 +281,8 @@ Application::~Application()
 {
     if(mCameraUniformBuffer.Buffer)
         mVRDev->DestroyBuffer(mCameraUniformBuffer);
-    if(mOutputImage.Image)
-        mVRDev->DestroyImage(mOutputImage);
+    if(mOutputImageBuffer.Image)
+        mVRDev->DestroyImage(mOutputImageBuffer);
 
     //Clean up
     delete mVRDev;
@@ -290,7 +290,7 @@ Application::~Application()
     glfwDestroyWindow(mWindow);
     glfwTerminate();
 
-    mDevice.destroyImageView(mOutputImageView);
+    mDevice.destroyImageView(mOutputImage.View);
 
 
     mDevice.destroyFence(mRenderFence);

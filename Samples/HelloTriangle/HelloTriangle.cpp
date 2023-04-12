@@ -23,12 +23,15 @@ public:
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
+    std::vector<vr::DescriptorItem> mResourceBindings;
+
+    vk::DescriptorSetLayout mResourceDescriptorLayout;
     
+    vr::DescriptorBuffer mResourceDescBuffer;
+
     vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
 	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
 
-    vk::DescriptorPool mDescriptorPool = nullptr;
-    vr::DescriptorSet mDescriptorSet;
     vk::Pipeline mRTPipeline = nullptr;
     vk::PipelineLayout mPipelineLayout = nullptr;
 
@@ -182,32 +185,23 @@ void HelloTriangle::CreateAS()
 void HelloTriangle::CreateRTPipeline()
 {
 
-    // create a descriptor pool
-    std::vector<vk::DescriptorPoolSize> poolSizes = {
-        vk::DescriptorPoolSize(vk::DescriptorType::eAccelerationStructureKHR, 1),
-        vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 1),
-        vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1),
-    };
-
-    mDescriptorPool = mVRDev->CreateDescriptorPool(poolSizes, vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1);
 
 
     // [POI]
-    // vr::DescriptorSet is a wrapper to encapsulate all Descriptor related structs
     // Now we create a descriptor layout for the ray tracing pipeline
     // last parameter is a pointer to the items vector, so we can use it later to create the descriptor set
     // for now we have only one item, so we just pass the address of the first element
     // if we want to update the descriptor set later with another item,
     // we can just reassign the vr::DescriptorItem::pItems with new items and update the descriptor set
-   mDescriptorSet.Items = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.AccelerationStructure),
-        vr::DescriptorItem(1, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImageView),
-        vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer.Buffer),
+    mResourceBindings = {
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
+        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 10, &mOutputImage, 1)
     };
 
 
-    mDescriptorSet.Layout = mVRDev->CreateDescriptorSetLayout(mDescriptorSet.Items); // create a descriptor set layout, for the ray tracing pipeline
-
+    // create a descriptor set layout, for the ray tracing pipeline
+    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
     
     // create shaders for the ray tracing pipeline
     // Spir-V bytecode is required in the info struct
@@ -245,7 +239,7 @@ void HelloTriangle::CreateRTPipeline()
     // create the ray tracing pipeline
 
     // Create a layout for the pipeline
-    mPipelineLayout = mVRDev->CreatePipelineLayout(mDescriptorSet.Layout);
+    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
     // create the ray tracing pipeline, a vk::Pipeline object
     mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
@@ -254,8 +248,10 @@ void HelloTriangle::CreateRTPipeline()
     // Build the shader binding table, it is a buffer that contains the shaders for the pipeline and we can update hit record data if we want
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
 
-    // create a descriptor set for the ray tracing pipeline
-    mDescriptorSet.Set = mVRDev->AllocateDescriptorSet(mDescriptorPool, mDescriptorSet.Layout);
+    // create a descriptor buffer for the ray tracing pipeline
+
+    mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
+
 
 }
 
@@ -266,37 +262,11 @@ void HelloTriangle::UpdateDescriptorSet()
     // movement, rotation and input is handled by the Application Base class and we can modify the camera values as we like
     mCamera.Pos = glm::vec3(0.0f, 0.0f, 2.5f);
 
+    // [POI] We already provided each descriptor item with the pointer to a resource back when we created the descriptor set layout
+    // so we can just update the resource values here
+    // if we want to update the descriptor set with a new item, we can just reassign the vr::DescriptorItem::p*** with new items and update the descriptor set
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);
 
-    std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
-    descUpdate.reserve(3);
-
-    //acceleration structure at binding 0, Look at Pipeline layout created earlier
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eAccelerationStructureKHR, 0));
-
-    // [POI]
-    // Get*Info(...) returns an Info struct for the write descriptor struct with the respective vulkan object pointer stored in vr::DescriptorItem::pItems
-    // the first parameter in Get*Info(...) means the n:th item in the DescriptorItem::pItems pointer
-    // if the pointer is null for the item, the pointer of the item in the struct will be null
-    // NOTE: we already set the pointer to the vulkan objects before in CreateRTPipeline() | line 207, so we don't need to set it again
-    // if we were to update the descriptor with another object we would have to set a new pointer for vr::DescriptorItem::pItems
-    auto accelInfo = mDescriptorSet.Items[0].GetAccelerationStructureInfo(0); // get the acceleration structure info (vk::WriteDescriptorSetAccelerationStructureKHR)
-    descUpdate[0].setPNext(&accelInfo); // set the next pointer to the acceleration structure info
-    descUpdate[0].setDescriptorCount(1); // we are updating only one descriptor
-    
-    //storage image at binding 1
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eStorageImage, 1));
-    auto imageInfo = mDescriptorSet.Items[1].GetImageInfo(0); 
-    descUpdate[1].setPImageInfo(&imageInfo); // set the image info
-    descUpdate[1].setDescriptorCount(1);
-
-    //uniform buffer at binding 2, This is the camera buffer and it gets updated every frame in the base class
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eUniformBuffer, 2));
-    auto bufferInfo = mDescriptorSet.Items[2].GetBufferInfo(0); 
-    descUpdate[2].setPBufferInfo(&bufferInfo); // set the buffer info
-    descUpdate[2].setDescriptorCount(1);
-    
-    // update the descriptor set
-    mVRDev->UpdateDescriptorSet(descUpdate);
 }
 
 void HelloTriangle::Update(vk::CommandBuffer renderCmd)
@@ -305,16 +275,22 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
 
+    auto bufferIndices = mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+
+    // set offsets for the descriptor set
+
+    // 0th set binds to the 0th buffer which is the resource descriptor buffer
+    mVRDev->BindDescriptorSet(mPipelineLayout, 0, bufferIndices[0], 0, renderCmd);
+
     //transition the output image to general layout for ray tracing
     mVRDev->TransitionImageLayout(
-        mOutputImage.Image,
+        mOutputImageBuffer.Image,
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eGeneral,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    // bind the descriptor set for ray tracing
-    renderCmd.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, mPipelineLayout, 0, 1, &mDescriptorSet.Set, 0, nullptr);
+    renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
     // [POI]
     // RAYTRACING INITIATING
@@ -328,7 +304,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         renderCmd);
 
     //transition the output image to transfer src optimal
-    mVRDev->TransitionImageLayout(mOutputImage.Image,
+    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
         vk::ImageLayout::eGeneral,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -337,7 +313,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     // [POI]
     //blit the output image to the swapchain image
     renderCmd.blitImage(
-        mOutputImage.Image, vk::ImageLayout::eTransferSrcOptimal,
+        mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) },
@@ -346,7 +322,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         vk::Filter::eNearest);
     
     //transition the output image to general
-    mVRDev->TransitionImageLayout(mOutputImage.Image,
+    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::ImageLayout::eGeneral,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -388,9 +364,9 @@ void HelloTriangle::Stop()
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);
-    mDevice.destroyDescriptorSetLayout(mDescriptorSet.Layout);
-    mDevice.freeDescriptorSets(mDescriptorPool, mDescriptorSet.Set);
-    mDevice.destroyDescriptorPool(mDescriptorPool);
+
+    mDevice.destroyDescriptorSetLayout(mResourceDescriptorLayout);
+    mVRDev->DestroyBuffer(mResourceDescBuffer.Buffer);
 
     mVRDev->DestroyBuffer(mVertexBuffer);
     mVRDev->DestroyBuffer(mIndexBuffer);

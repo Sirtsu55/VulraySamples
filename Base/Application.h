@@ -39,8 +39,8 @@ protected:
 
 	vk::CommandPool mGraphicsPool;
 
-	vr::ImageAllocation mOutputImage;
-    vk::ImageView mOutputImageView = nullptr;
+	vr::AllocatedImage mOutputImageBuffer;
+    vr::AccessibleImage mOutputImage;
 
 	vr::SwapchainStructs mSwapchainStructs;
 	uint32_t mMaxFramesInFlight = 0;

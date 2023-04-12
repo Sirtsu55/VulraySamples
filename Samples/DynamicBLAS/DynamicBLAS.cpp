@@ -29,8 +29,10 @@ public:
     vr::ShaderBindingTable mSBT;    
 	vr::SBTBuffer mSBTBuffer;      
 
-    vk::DescriptorPool mDescriptorPool = nullptr;
-    vr::DescriptorSet mDescriptorSet;
+    std::vector<vr::DescriptorItem> mResourceBindings;
+    vk::DescriptorSetLayout mResourceDescriptorLayout;
+    vr::DescriptorBuffer mResourceDescBuffer;
+
     vk::Pipeline mRTPipeline = nullptr;
     vk::PipelineLayout mPipelineLayout = nullptr;
 
@@ -164,10 +166,11 @@ void DynamicBLAS::CreateAS()
 void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 {
     // modify the triangle
+    float size = sinf(glfwGetTime()) / 2.0f + 0.5f;
     float vertices[] = {
-        1.0f, 1.0f, 0.0f,
-        -1.0f, 1.0f, 0.0f,
-        0.0f, sinf(glfwGetTime()) - 1.0f, 0.0f
+        size, size, 0.0f,
+        -size, size, 0.0f,
+        0.0f, -size, 0.0f
     };
 
     // [POI] Additional Info
@@ -209,24 +212,14 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 void DynamicBLAS::CreateRTPipeline()
 {
 
-    // create a descriptor pool
-    std::vector<vk::DescriptorPoolSize> poolSizes = {
-        vk::DescriptorPoolSize(vk::DescriptorType::eAccelerationStructureKHR, 1),
-        vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 1),
-        vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1),
-    };
-
-    mDescriptorPool = mVRDev->CreateDescriptorPool(poolSizes, vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1);
-
-
-   mDescriptorSet.Items = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.AccelerationStructure),
-        vr::DescriptorItem(1, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImageView),
-        vr::DescriptorItem(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer.Buffer),
+    mResourceBindings = {
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
+        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
     };
 
 
-    mDescriptorSet.Layout = mVRDev->CreateDescriptorSetLayout(mDescriptorSet.Items); // create a descriptor set layout, for the ray tracing pipeline
+    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
 
     
     // create shaders for the ray tracing pipeline
@@ -256,14 +249,15 @@ void DynamicBLAS::CreateRTPipeline()
     
     // create the ray tracing pipeline
 
-    mPipelineLayout = mVRDev->CreatePipelineLayout(mDescriptorSet.Layout);
+    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
     mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
 
     // create a descriptor set for the ray tracing pipeline
-    mDescriptorSet.Set = mVRDev->AllocateDescriptorSet(mDescriptorPool, mDescriptorSet.Layout);
+
+    mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
 }
 
@@ -273,29 +267,7 @@ void DynamicBLAS::UpdateDescriptorSet()
 
     mCamera.Pos = glm::vec3(0.0f, 0.0f, 5.0f);
 
-    std::vector<vk::WriteDescriptorSet> descUpdate; // 3 descriptors to update
-    descUpdate.reserve(3);
-
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eAccelerationStructureKHR, 0));
-
-    auto accelInfo = mDescriptorSet.Items[0].GetAccelerationStructureInfo(0); 
-    descUpdate[0].setPNext(&accelInfo); // set the next pointer to the acceleration structure info
-    descUpdate[0].setDescriptorCount(1); 
-    
-    //storage image at binding 1
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eStorageImage, 1));
-    auto imageInfo = mDescriptorSet.Items[1].GetImageInfo(0); 
-    descUpdate[1].setPImageInfo(&imageInfo); // set the image info
-    descUpdate[1].setDescriptorCount(1);
-
-    //uniform buffer at binding 2
-    descUpdate.push_back(mDescriptorSet.GetWriteDescriptorSets(vk::DescriptorType::eUniformBuffer, 2));
-    auto bufferInfo = mDescriptorSet.Items[2].GetBufferInfo(0); 
-    descUpdate[2].setPBufferInfo(&bufferInfo); // set the buffer info
-    descUpdate[2].setDescriptorCount(1);
-    
-    // update the descriptor set
-    mVRDev->UpdateDescriptorSet(descUpdate);
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);    
 }
 
 void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
@@ -304,14 +276,15 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 
     UpdateBLAS(renderCmd);
 
+    auto bufferIndices = mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorSet(mPipelineLayout, 0, bufferIndices[0], 0, renderCmd);
+
     mVRDev->TransitionImageLayout(
-        mOutputImage.Image,
+        mOutputImageBuffer.Image,
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eGeneral,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
-
-    renderCmd.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, mPipelineLayout, 0, 1, &mDescriptorSet.Set, 0, nullptr);
 
     mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
 
@@ -321,14 +294,14 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->TransitionImageLayout(mOutputImage.Image,
+    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
         vk::ImageLayout::eGeneral,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
     renderCmd.blitImage(
-        mOutputImage.Image, vk::ImageLayout::eTransferSrcOptimal,
+        mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) },
@@ -336,7 +309,7 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
         vk::Filter::eNearest);
     
-    mVRDev->TransitionImageLayout(mOutputImage.Image,
+    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::ImageLayout::eGeneral,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -374,9 +347,9 @@ void DynamicBLAS::Stop()
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);
-    mDevice.destroyDescriptorSetLayout(mDescriptorSet.Layout);
-    mDevice.freeDescriptorSets(mDescriptorPool, mDescriptorSet.Set);
-    mDevice.destroyDescriptorPool(mDescriptorPool);
+
+    mDevice.destroyDescriptorSetLayout(mResourceDescriptorLayout);
+    mVRDev->DestroyBuffer(mResourceDescBuffer.Buffer);
 
     mVRDev->DestroyBuffer(mVertexBuffer);
     mVRDev->DestroyBuffer(mIndexBuffer);
