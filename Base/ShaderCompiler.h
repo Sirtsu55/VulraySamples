@@ -1,6 +1,12 @@
 #include <vulkan/vulkan.hpp>
-#include <shaderc/shaderc.hpp>
 
+#ifdef _WIN32
+    #include <atlbase.h>
+#else
+    #include <dxc/WinAdapter.h>
+#endif
+
+#include <dxc/dxcapi.h>
 
 class ShaderCompiler
 {
@@ -13,8 +19,8 @@ public:
     std::vector<uint32_t> CompileSPIRVFromFile(const vk::ShaderStageFlagBits stage, const std::string& file);
 private:
 
-    shaderc::Compiler mCompiler = {};
-    shaderc::CompileOptions mOptions = {};
+    CComPtr<IDxcUtils> mUtils;
+    CComPtr<IDxcCompiler3> mCompiler;
 };
 
 

@@ -226,29 +226,24 @@ void DynamicBLAS::CreateRTPipeline()
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    VULRAY_LOG_INFO("Compiling Shaders");
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, "Shaders/ColorfulTriangle/ColorfulTriangle.rgen.glsl"));
-    mSBT.RayGenShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
-
-
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, "Shaders/ColorfulTriangle/ColorfulTriangle.rmiss.glsl"));
-    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
+    mSBT.RayGenShader = shaderModule;
+    mSBT.RayGenShader.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
+    mSBT.RayGenShader.EntryPoint = "rgen"; 
 
 
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, "Shaders/ColorfulTriangle/ColorfulTriangle.rchit.glsl"));
-
-    VULRAY_LOG_INFO("Shaders Compiled");
+    mSBT.MissShaders.push_back(shaderModule);
+    mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
+    mSBT.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
-    hitGroup.ClosestHitShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
+    hitGroup.ClosestHitShader = shaderModule;
+    hitGroup.ClosestHitShader.EntryPoint = "chit";
+    hitGroup.ClosestHitShader.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     mSBT.HitGroups.push_back(hitGroup);
     
-    // create the ray tracing pipeline
-
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
     mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
@@ -256,7 +251,6 @@ void DynamicBLAS::CreateRTPipeline()
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
 
     // create a descriptor set for the ray tracing pipeline
-
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
 }
@@ -341,9 +335,8 @@ void DynamicBLAS::Stop()
 
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
-    mVRDev->DestroyShader(mSBT.RayGenShader);
-    mVRDev->DestroyShader(mSBT.MissShaders[0]);
-    mVRDev->DestroyShader(mSBT.HitGroups[0].ClosestHitShader);
+
+    mVRDev->DestroyShader(mSBT.RayGenShader); 
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);

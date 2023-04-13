@@ -3,6 +3,8 @@
 #include "Application.h"
 #include "FileRead.h"
 #include "ShaderCompiler.h"
+#include <filesystem>
+
 
 class HelloTriangle : public Application
 {
@@ -209,31 +211,33 @@ void HelloTriangle::CreateRTPipeline()
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    VULRAY_LOG_INFO("Compiling Shaders");
+    // Shader compiler class from from Base/ will perform HLSL -> SPIR-V translation.
+    // We put eRaygenKHR as stage, but it has to be one of the ray tracing stages, because DXC compiler will use 
+    // lib_6_x to compile any of the ray tracing stages eg. eRaygenKHR, eMissKHR, eClosestHitKHR, eAnyHitKHR, eIntersectionKHR -> lib_6_x
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    // since HLSL allows multiple entry points in a single shader, we have all of the ray tracing stages in one shader
+    // if compiling from glsl we would have to create a separate shader module for each stage
+    auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
-    // Shader compiler class from from Base/ will perform GLSL -> SPIR-V translation, it takes about 1 second to compile the three shaders
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/ColorfulTriangle/ColorfulTriangle.rgen.glsl"));
     // add the shader to the shader binding table which stores all the shaders for the pipeline
-    mSBT.RayGenShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
+    mSBT.RayGenShader = shaderModule;
+    mSBT.RayGenShader.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
+    // entry point for the ray generation shader, if there are multiple entry points in the shader.
+    // In this case we are using one shader module with all the required entry points, 
+    // but by default it is "main" because most GLSL compilers use "main" as the default entry point
+    mSBT.RayGenShader.EntryPoint = "rgen"; 
 
 
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eMissKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/ColorfulTriangle/ColorfulTriangle.rmiss.glsl"));
-    mSBT.MissShaders.push_back(mVRDev->CreateShaderFromSPV(shaderCreateInfo));
-
-
-    shaderCreateInfo.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
-    shaderCreateInfo.SPIRVCode = std::move(mShaderCompiler.CompileSPIRVFromFile(shaderCreateInfo.Stage, SHADER_DIR"/ColorfulTriangle/ColorfulTriangle.rchit.glsl"));
-
-    VULRAY_LOG_INFO("Shaders Compiled");
+    mSBT.MissShaders.push_back(shaderModule);
+    mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
+    mSBT.MissShaders.back().EntryPoint = "miss";
 
     // [POI]
     //hit groups can contain multiple shaders, so there is another special struct for it
     vr::HitGroup hitGroup = {};
-
-    hitGroup.ClosestHitShader = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
-
+    hitGroup.ClosestHitShader = shaderModule;
+    hitGroup.ClosestHitShader.EntryPoint = "chit";
+    hitGroup.ClosestHitShader.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     mSBT.HitGroups.push_back(hitGroup);
     
     // create the ray tracing pipeline
@@ -363,9 +367,8 @@ void HelloTriangle::Stop()
     
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
-    mVRDev->DestroyShader(mSBT.RayGenShader);
-    mVRDev->DestroyShader(mSBT.MissShaders[0]);
-    mVRDev->DestroyShader(mSBT.HitGroups[0].ClosestHitShader);
+    // this was the shader module for all of the shaders in the SBT
+    mVRDev->DestroyShader(mSBT.RayGenShader); 
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);
