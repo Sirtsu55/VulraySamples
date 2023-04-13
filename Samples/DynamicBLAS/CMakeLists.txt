@@ -9,4 +9,4 @@ add_executable("DynamicBLAS"
 	DynamicBLAS.cpp)
 
 
-set_property(TARGET "DynamicBLAS" PROPERTY CXX_STANDARD 20)
+ConfigureTarget("DynamicBLAS")

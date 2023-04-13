@@ -9,4 +9,4 @@ add_executable( "HelloTriangle"
 	HelloTriangle.cpp)
 
 
-set_property(TARGET "HelloTriangle" PROPERTY CXX_STANDARD 20)
+ConfigureTarget("HelloTriangle")
