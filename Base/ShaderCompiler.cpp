@@ -31,6 +31,7 @@ ShaderCompiler::ShaderCompiler()
 {
     DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&mUtils));
     DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&mCompiler));
+    mUtils->CreateDefaultIncludeHandler(&mIncludeHandler);
 }
 
 
@@ -62,7 +63,7 @@ std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const vk::ShaderSta
     sourceBuffer.Encoding = 0;
 
     CComPtr<IDxcResult> pCompileResult;
-    mCompiler->Compile(&sourceBuffer, arguments.data(), (uint32_t)arguments.size(), nullptr, IID_PPV_ARGS(&pCompileResult));
+    mCompiler->Compile(&sourceBuffer, arguments.data(), (uint32_t)arguments.size(), mIncludeHandler, IID_PPV_ARGS(&pCompileResult));
 
     //Error Handling
     CComPtr<IDxcBlobUtf8> pErrors;

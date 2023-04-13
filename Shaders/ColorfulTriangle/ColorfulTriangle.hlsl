@@ -1,9 +1,6 @@
 
-struct CameraProperties
-{
-	float4x4 viewInverse;
-	float4x4 projInverse;
-};
+// includes are relative to the executable directory
+#include "Shaders/Common/Camera.hlsl"
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;

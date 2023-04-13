@@ -21,6 +21,7 @@ private:
 
     CComPtr<IDxcUtils> mUtils;
     CComPtr<IDxcCompiler3> mCompiler;
+    CComPtr<IDxcIncludeHandler> mIncludeHandler;
 };
 
 

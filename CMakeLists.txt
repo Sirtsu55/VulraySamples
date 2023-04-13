@@ -38,12 +38,12 @@ function(ConfigureTarget tgt)
          TARGET ${tgt} POST_BUILD
          COMMAND ${CMAKE_COMMAND} 
 		 -E copy_directory ${CMAKE_SOURCE_DIR}/Shaders $<TARGET_FILE_DIR:${tgt}>/Shaders
-         COMMENT "Copying shaders for ${tgt}" VERBATIM)
+         COMMENT "Copying shaders for ${tgt}")
 	if(WIN32)
 		add_custom_command(
 			TARGET ${tgt} POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy ${DXC_DLL} $<TARGET_FILE_DIR:${tgt}>
-			COMMENT "Copying DXC dll" VERBATIM)
+			COMMAND ${CMAKE_COMMAND} -E echo "Copying DXC dll")
 	endif()
 endfunction()
 
