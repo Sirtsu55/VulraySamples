@@ -18,7 +18,7 @@ public:
     void UpdateDescriptorSet();
 
     void UpdateTLAS(vk::CommandBuffer cmd);
-
+    void UpdateInstances();
 public:
 
     ShaderCompiler mShaderCompiler;
@@ -146,30 +146,22 @@ void DynamicTLAS::CreateAS()
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 }
 
-void DynamicTLAS::UpdateTLAS(vk::CommandBuffer cmd)
+void DynamicTLAS::UpdateInstances()
 {
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool);
-    buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
     float x = 0.0f, z = 0.0f;
-    x = cosf(glfwGetTime());
-    z = sinf(glfwGetTime());
-    glm::vec3 pos = glm::vec3(x,0.0f, z);
+    float time = glfwGetTime();
 
     for(int i = 0; i < mInstanceData.size(); i++)
     {
-        auto glmTransform = glm::translate(glm::mat4(1.0f), pos);
+        // cool animation for the instances
+        x = cosf(time + i) + i;
+        z = sinf(time + i) + i;
 
-        auto row1 = glmTransform[0];
-        auto row2 = glmTransform[1];
-        auto row3 = glmTransform[2];
-
-        vk::TransformMatrixKHR transform;
-
-        memcpy(&transform, &row1, sizeof(float) * 4); // copy the matrix data
-        memcpy(&transform + 4, &row2, sizeof(float) * 4); // copy the matrix data
-        memcpy(&transform + 8, &row3, sizeof(float) * 4);
-
+        VkTransformMatrixKHR transform = { // 3x4 matrix
+            1.0f, 0.0f, 0.0f, x,
+            0.0f, 1.0f, 0.0f, 0.0,
+            0.0f, 0.0f, 1.0f, z
+        };
 
         // copy the matrix data
 
@@ -184,20 +176,30 @@ void DynamicTLAS::UpdateTLAS(vk::CommandBuffer cmd)
 
     mVRDev->UpdateBuffer(mInstanceBuffer, mInstanceData.data(), sizeof(vk::AccelerationStructureInstanceKHR) * mInstanceData.size());
 
+}
+
+void DynamicTLAS::UpdateTLAS(vk::CommandBuffer cmd)
+{
+    UpdateInstances();
+    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool);
+    buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
     // [POI]
     // Update the TLAS
     // We have to update the TLAS every frame, because the instance data has changed
     // We give the function the TLAS handle and the TLAS build info, and get new handles and build infos back
-    // there is a bool to specify if we want destruction of the old TLAS, we set it to true
+    // there is a bool to specify if we want destruction of the old TLAS, we set it to true, because we don't need the old TLAS anymore
+    // we would have to keep it if we wanted to update the TLAS while the old one is still in use, and then after the frame finishes, we would have to destroy the old TLAS
+    // and update the descriptor set to point to the new TLAS.
     // Keep in mind that the UpdateTLAS(...) creates a new TLAS, so it is not actually an update, but a rebuild, Vulray doesn't offer TLAS updates, but rebuilds
     // This is because the TLAS degrades over time, so it is better to rebuild it every frame and the build time is negligible in real time applications
     // NVIDIA best practices: https://developer.nvidia.com/blog/rtx-best-practices/ 
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo, true);
 
-    auto newScratch = mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), cmd, &mScratchBuffer);
+    auto newScratch = mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), buildCmd, &mScratchBuffer);
 
 
-    mVRDev->AddAccelerationBuildBarrier(cmd);
+    mVRDev->AddAccelerationBuildBarrier(buildCmd);
     //if they are the same size, then BuildBLAS returned the same buffer, leave as it is
     // but if they are different, then BuildBLAS returned a new buffer, so destroy the old one and set the new one
     if (newScratch.Size != mScratchBuffer.Size)
@@ -207,8 +209,25 @@ void DynamicTLAS::UpdateTLAS(vk::CommandBuffer cmd)
         mScratchBuffer = newScratch;
     }
 
-    // Update the descriptor
-    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings[0], vr::DescriptorBufferType::Resource, 0, nullptr);
+    buildCmd.end();
+
+    // submit the command buffer and wait for it to finish
+    // ideally semaphores should be used here, but for simplicity we will just wait for the command buffer to finish
+    auto submitInfo = vk::SubmitInfo()
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&buildCmd);
+
+    mQueues.GraphicsQueue.submit(submitInfo, nullptr);
+    
+    mDevice.waitIdle();
+
+    // Update the descriptor, if we had used a semaphores, we would have to wait for the build to finish before updating the descriptor
+    // and make sure the descriptor is not used by the GPU at the same time
+    mVRDev->UpdateDescriptorBuffer( mResourceDescBuffer,
+                                    mResourceBindings[0], // the first binding is the TLAS
+                                    0, // index of pResources in the binding
+                                    vr::DescriptorBufferType::Resource,
+                                    0); // index of the set in the buffer
 }
 
 
@@ -335,6 +354,7 @@ void DynamicTLAS::Stop()
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
     mVRDev->DestroyBuffer(mScratchBuffer);
+    mVRDev->DestroyBuffer(mInstanceBuffer);
 
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
