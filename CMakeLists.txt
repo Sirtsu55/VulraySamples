@@ -34,6 +34,7 @@ link_libraries(Vulray glfw Vulkan::dxc_lib)
 # helper function to copy shaders to the output directory for each sample
 function(ConfigureTarget tgt)
 	set_property(TARGET ${tgt} PROPERTY CXX_STANDARD 20)
+	target_compile_definitions(${tgt} PRIVATE SAMPLE_NAME="${tgt}")
 	add_custom_command(
          TARGET ${tgt} POST_BUILD
          COMMAND ${CMAKE_COMMAND} 

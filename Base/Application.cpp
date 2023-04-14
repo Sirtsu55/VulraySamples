@@ -16,7 +16,7 @@ Application::Application()
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); //Sets the client API to GLFW_NO_API, which means that the application will not create an OpenGL context
 
-    mWindow = glfwCreateWindow(mWidth, mHeight, "HelloTriangle", nullptr, nullptr); //Creates a window
+    mWindow = glfwCreateWindow(mWidth, mHeight, SAMPLE_NAME, nullptr, nullptr); //Creates a window
 
     // specify debug callback by passing a pointer to the function if you want to use it
     // vr::LogCallback = logcback;
