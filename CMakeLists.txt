@@ -51,3 +51,4 @@ endfunction()
 # add samples
 add_subdirectory("Samples/HelloTriangle")
 add_subdirectory("Samples/DynamicBLAS")
+add_subdirectory("Samples/DynamicTLAS")
