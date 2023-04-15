@@ -1,3 +1,9 @@
+#pragma once
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 struct Camera
 {
     glm::vec3 Pos = { 0.0f, 0.0f, 0.0f };
@@ -13,6 +19,10 @@ struct Camera
     float Pitch = 0.0f;
     float Yaw = 0.0f;
     float Roll = 0.0f;
+
+    float Near = 0.1f;
+    float Far = 10000.0f;
+    float AspectRatio = 16.0f / 9.0f;
 
     void MoveForward(float value)
     {
@@ -54,9 +64,9 @@ struct Camera
         return rotation * translate;
     }
 
-    glm::mat4 GetProjectionMatrix(uint32_t width, uint32_t height)
+    glm::mat4 GetProjectionMatrix()
     {
-        return glm::perspective(glm::radians(FOV), (float)width / (float)height, 0.1f, 100.0f);
+        return glm::perspective(glm::radians(FOV), AspectRatio, Near, Far);
     }
 
     

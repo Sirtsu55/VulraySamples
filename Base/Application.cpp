@@ -259,7 +259,8 @@ void Application::UpdateCamera()
 
     glm::mat4 view = mCamera.GetViewMatrix();
 
-    glm::mat4 proj = mCamera.GetProjectionMatrix(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height);
+    mCamera.AspectRatio = (float)mSwapchainStructs.SwapchainExtent.width / (float)mSwapchainStructs.SwapchainExtent.height;
+    glm::mat4 proj = mCamera.GetProjectionMatrix();
 
     //update the view matrix
     glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };

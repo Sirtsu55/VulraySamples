@@ -23,6 +23,7 @@ include_directories(
 	"Vulray/Include/" 
 	"Vendor/glfw/" 
 	"Vendor/glm/"
+	"Vendor/tinygltf/"
 	"${Vulkan_INCLUDE_DIRS}"
 	)
 	
@@ -35,10 +36,12 @@ link_libraries(Vulray glfw Vulkan::dxc_lib)
 function(ConfigureTarget tgt)
 	set_property(TARGET ${tgt} PROPERTY CXX_STANDARD 20)
 	target_compile_definitions(${tgt} PRIVATE SAMPLE_NAME="${tgt}")
+	target_precompile_headers("Vulray" PRIVATE "${PROJECT_SOURCE_DIR}/Base/Common.h")
+
 	add_custom_command(
          TARGET ${tgt} POST_BUILD
-         COMMAND ${CMAKE_COMMAND} 
-		 -E copy_directory ${CMAKE_SOURCE_DIR}/Shaders $<TARGET_FILE_DIR:${tgt}>/Shaders
+         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/Shaders $<TARGET_FILE_DIR:${tgt}>/Shaders
+         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/Assets $<TARGET_FILE_DIR:${tgt}>/Assets
          COMMENT "Copying shaders for ${tgt}")
 	if(WIN32)
 		add_custom_command(
@@ -53,3 +56,4 @@ endfunction()
 add_subdirectory("Samples/HelloTriangle")
 add_subdirectory("Samples/DynamicBLAS")
 add_subdirectory("Samples/DynamicTLAS")
+add_subdirectory("Samples/MultipleGeometries")
