@@ -60,9 +60,9 @@ void HelloTriangle::CreateAS()
     // vertex and index data for the triangle
 
     float vertices[] = {
-        1.0f, 1.0f, 0.0f,
-        -1.0f, 1.0f, 0.0f,
-        0.0f,  -1.0f, 0.0f
+        1.0f, -1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,
+        0.0f,  1.0f, 0.0f
     };
     uint32_t indices[] = { 0, 1, 2 };
 

@@ -36,7 +36,7 @@ link_libraries(Vulray glfw Vulkan::dxc_lib)
 function(ConfigureTarget tgt)
 	set_property(TARGET ${tgt} PROPERTY CXX_STANDARD 20)
 	target_compile_definitions(${tgt} PRIVATE SAMPLE_NAME="${tgt}")
-	target_precompile_headers("Vulray" PRIVATE "${PROJECT_SOURCE_DIR}/Base/Common.h")
+	target_precompile_headers(${tgt} PRIVATE "${PROJECT_SOURCE_DIR}/Base/Common.h")
 
 	add_custom_command(
          TARGET ${tgt} POST_BUILD

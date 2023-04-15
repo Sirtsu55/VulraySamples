@@ -64,9 +64,9 @@ void DynamicBLAS::CreateAS()
     // vertex and index data for the triangle
 
     float vertices[] = {
-        1.0f, 1.0f, 0.0f,
-        -1.0f, 1.0f, 0.0f,
-        0.0f,  -1.0f, 0.0f
+        1.0f, -1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,
+        0.0f,  1.0f, 0.0f
     };
     uint32_t indices[] = { 0, 1, 2 };
 
@@ -168,9 +168,9 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
     // modify the triangle
     float size = sinf(glfwGetTime()) / 2.0f + 0.5f;
     float vertices[] = {
-        size, size, 0.0f,
-        -size, size, 0.0f,
-        0.0f, -size, 0.0f
+        size, -size, 0.0f,
+        -size, -size, 0.0f,
+        0.0f, size, 0.0f
     };
 
     // [POI] Additional Info
