@@ -1,73 +1,40 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
 
-struct Camera
+class Camera 
 {
-    glm::vec3 Pos = { 0.0f, 0.0f, 0.0f };
 
-	float FOV = 45.0f;
-	float Speed = 2.5f;
-	float Sensitivity = 5000.f;
+public:
+    // Constructor
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),
+           glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+           float fov = 45.0f, float aspectRatio = 16.0f / 9.0f,
+           float nearPlane = 0.1f, float farPlane = 100.0f);
 
-    glm::vec3 Forward = { 0.0f, 0.0f, -1.0f };
-    glm::vec3 Right = { 1.0f, 0.0f, 0.0f };
-    glm::vec3 Up = { 0.0f, 1.0f, 0.0f };
+    // Getters
+    glm::mat4 GetViewMatrix() const;
+    glm::mat4 GetProjectionMatrix() const;
 
-    float Pitch = 0.0f;
-    float Yaw = 0.0f;
-    float Roll = 0.0f;
+    // Movement
+    void MoveRight(float distance);
+    void MoveForward(float distance);
 
-    float Near = 0.1f;
-    float Far = 10000.0f;
-    float AspectRatio = 16.0f / 9.0f;
+    void Rotate(float pitch, float yaw, float roll); 
 
-    void MoveForward(float value)
-    {
-        Pos += Forward * Speed * value;
-    }
-    void MoveRight(float value)
-    {
-        Pos += Right * Speed * value;
-    }
+    glm::vec3 Position;      // Camera position
+    glm::quat Rotation;      // Camera rotation
+    float Fov;               // Field of view (in degrees)
+    float AspectRatio;      // Aspect ratio of the viewport
+    float NearPlane;        // Near clipping plane
+    float FarPlane;         // Far clipping plane
 
-    void Rotate(float x, float y, float z)
-    {
-        Pitch += x * Sensitivity;
-        Yaw += y * Sensitivity;
-        Roll += z * Sensitivity;
-    }
+    float Sensitivity = 5000.f; // Mouse sensitivity
+    float Speed = 2.5f;       // Camera movement speed
 
-    glm::mat4 GetViewMatrix()
-    {
-        //FPS camera:  RotationX(pitch) * RotationY(yaw)
-        glm::quat qPitch = glm::angleAxis(Pitch, glm::vec3(1, 0, 0));
-        glm::quat qYaw = glm::angleAxis(Yaw, glm::vec3(0, 1, 0));
-        glm::quat qRoll = glm::angleAxis(Roll,glm::vec3(0,0,1));  
+    glm::vec3 Front = glm::vec3(0.0, 0.0, -1.0);
+    glm::vec3 Right = glm::vec3(1.0, 0.0, 0.0);
+    glm::vec3 Up = glm::vec3(0.0, 1.0, 0.0);
 
-
-        //For a FPS camera we can omit roll
-        glm::quat orientation = qPitch * qYaw;
-        orientation = glm::normalize(orientation);
-
-        Up = glm::normalize(glm::inverse(orientation) * glm::vec3(0, 1, 0));
-        Forward = glm::normalize(glm::inverse(orientation) * glm::vec3(0, 0, -1));
-        Right = glm::normalize(glm::inverse(orientation) * glm::vec3(1, 0, 0));
-
-        glm::mat4 rotation = glm::mat4_cast(orientation);
-        
-        glm::mat4 translate = glm::mat4(1.0f);
-        translate = glm::translate(translate, -Pos);
-
-        return rotation * translate;
-    }
-
-    glm::mat4 GetProjectionMatrix()
-    {
-        return glm::perspective(glm::radians(FOV), AspectRatio, Near, Far);
-    }
-
-    
 };

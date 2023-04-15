@@ -264,7 +264,7 @@ void HelloTriangle::UpdateDescriptorSet()
 {
     // Set the camera position
     // movement, rotation and input is handled by the Application Base class and we can modify the camera values as we like
-    mCamera.Pos = glm::vec3(0.0f, 0.0f, 2.5f);
+    mCamera.Position = glm::vec3(0.0f, 0.0f, 2.5f);
 
     // [POI] We already provided each descriptor item with the pointer to a resource back when we created the descriptor set layout
     // so we can just update the resource values here

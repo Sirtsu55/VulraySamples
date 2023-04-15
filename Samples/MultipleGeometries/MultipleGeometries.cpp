@@ -65,7 +65,7 @@ void MultipleGeometries::CreateAS()
     if(scene.Cameras.size() != 0)
         mCamera = scene.Cameras[0];
     else
-        mCamera.Pos = glm::vec3(0.0f, 0.0f, 5.0f);
+        mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
 
 
     auto& meshes = scene.Meshes;
