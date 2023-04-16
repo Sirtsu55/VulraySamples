@@ -14,8 +14,8 @@ public:
            float nearPlane = 0.1f, float farPlane = 100.0f);
 
     // Getters
-    glm::mat4 GetViewMatrix() const;
-    glm::mat4 GetProjectionMatrix() const;
+    glm::mat4 GetViewMatrix();
+    glm::mat4 GetProjectionMatrix();
 
     // Movement
     void MoveRight(float distance);
@@ -30,11 +30,15 @@ public:
     float NearPlane;        // Near clipping plane
     float FarPlane;         // Far clipping plane
 
-    float Sensitivity = 5000.f; // Mouse sensitivity
+    float Sensitivity = 100000.f; // Mouse sensitivity
     float Speed = 2.5f;       // Camera movement speed
 
     glm::vec3 Front = glm::vec3(0.0, 0.0, -1.0);
     glm::vec3 Right = glm::vec3(1.0, 0.0, 0.0);
     glm::vec3 Up = glm::vec3(0.0, 1.0, 0.0);
 
+    // When the camera is rotated, the front, right and up vectors need to be recalculated
+    // Done automatically by the Rotate function, but can be done manually if needed
+    void UpdateDirections();
+private:
 };

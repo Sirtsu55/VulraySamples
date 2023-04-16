@@ -26,6 +26,7 @@ public:
     
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
+    vr::AllocatedBuffer mTransformBuffer;
 
     std::vector<vr::DescriptorItem> mResourceBindings;
 
@@ -60,25 +61,30 @@ void MultipleGeometries::Start()
 void MultipleGeometries::CreateAS()
 {
     mMeshLoader = MeshLoader();
+    // Get the scene info from the glb file
     auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
 
-    if(scene.Cameras.size() != 0)
+    // Set the camera position to the center of the scene
+    if(scene.Cameras.size() > 0)
         mCamera = scene.Cameras[0];
-    else
-        mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
+    mCamera.Speed = 25.0f;
 
-
-    auto& meshes = scene.Meshes;
-
-
+    auto& geometries = scene.Geometries;
+   
     uint32_t vertBufferSize = 0;
     uint32_t idxBufferSize = 0;
+    uint32_t transBufferSize = 0;
 
-    // calculate the size of the buffers
-    for (auto& m : meshes)
-        vertBufferSize += m.Vertices.size();
-    for (auto& m : meshes)
-        idxBufferSize += m.Indices.size();
+    // calculate the size required for the buffers
+    for (auto& mesh : scene.Meshes)
+    {
+        for (auto& geomRef : mesh.GeometryReferences)
+        {
+            vertBufferSize += geometries[geomRef].Vertices.size();
+            idxBufferSize += geometries[geomRef].Indices.size();
+        }
+        transBufferSize += sizeof(vk::TransformMatrixKHR);
+    }
 
     // Store all the primitives in a single buffer, it is efficient to do so
     mVertexBuffer = mVRDev->CreateBuffer(
@@ -93,35 +99,60 @@ void MultipleGeometries::CreateAS()
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
     );
 
-    
+    // Create a buffer to store the transform for the BLAS
+    mTransformBuffer = mVRDev->CreateBuffer(
+        transBufferSize, 
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
+    );
+
+
 	// Create info struct for the BLAS
     vr::BLASCreateInfo blasCreateInfo = {};
     blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
     
+
     // Copy the vertex and index data into the buffers
     uint32_t vertOffset = 0;
     uint32_t idxOffset = 0;
+    uint32_t transOffset = 0;
+
+
+    // [POI]
+    // Map the buffer so we can copy the data into it
+    // the UpdateBuffer() function can be used to copy data into a buffer, but it is slower, because it maps and unmaps the buffer every call
     char* vertData = (char*)mVRDev->MapBuffer(mVertexBuffer);
     char* idxData = (char*)mVRDev->MapBuffer(mIndexBuffer);
-    for (auto& m : meshes)
+    char* transData = (char*)mVRDev->MapBuffer(mTransformBuffer);
+    for (auto& mesh : scene.Meshes)
     {
-        vr::GeometryData geomData = {};
-        geomData.VertexFormat = m.VertexFormat;
-        geomData.Stride = m.VertexSize;
-        geomData.IndexFormat = m.IndexFormat;
-        geomData.PrimitiveCount = m.Indices.size() / m.IndexSize / 3;
-        geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset;
-        geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset;
-        blasCreateInfo.Geometries.push_back(geomData);
-        
-        memcpy(vertData + vertOffset, m.Vertices.data(), m.Vertices.size());
-        memcpy(idxData + idxOffset, m.Indices.data(), m.Indices.size());
-        vertOffset += m.Vertices.size();
-        idxOffset += m.Indices.size();
+        for (auto& geomRef : mesh.GeometryReferences)
+        {
+			auto& geom = geometries[geomRef];
+			vr::GeometryData geomData = {};
+			geomData.VertexFormat = geom.VertexFormat;
+			geomData.Stride = geom.VertexSize;
+			geomData.IndexFormat = geom.IndexFormat;
+			geomData.PrimitiveCount = geom.Indices.size() / geom.IndexSize / 3;
+			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset;
+			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset;
+			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress;
+			blasCreateInfo.Geometries.push_back(geomData);
+			
+			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size());
+			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size());
+			vertOffset += geom.Vertices.size(); // the size is in bytes
+			idxOffset += geom.Indices.size();
+		}
+        memcpy(transData + transOffset, &mesh.Transform, sizeof(vk::TransformMatrixKHR));
+        transOffset += sizeof(vk::TransformMatrixKHR);
     }
     mVRDev->UnmapBuffer(mVertexBuffer);
     mVRDev->UnmapBuffer(mIndexBuffer);
+    mVRDev->UnmapBuffer(mTransformBuffer);
 
+    // Everything else is just like the single geometry sample
+    // Simple and easy
 
     auto[blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
@@ -323,6 +354,7 @@ void MultipleGeometries::Stop()
 
     mVRDev->DestroyBuffer(mVertexBuffer);
     mVRDev->DestroyBuffer(mIndexBuffer);
+    mVRDev->DestroyBuffer(mTransformBuffer);
     mVRDev->DestroyBLAS(mBLASHandle);
     mVRDev->DestroyTLAS(mTLASHandle);
 }

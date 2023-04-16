@@ -5,8 +5,20 @@
 #include <vulkan/vulkan.hpp>
 #include <tiny_gltf.h>
 #include "Camera.h"
+#include <glm/gtx/matrix_major_storage.hpp>
 
 struct Mesh
+{
+    std::vector<uint32_t> GeometryReferences;
+
+    // std::vector<uint32_t> MaterialReferences;
+
+    // transform is applied to all geometries in the mesh
+    // stored in row major order, similar to VkTransformMatrixKHR
+    glm::mat3x4 Transform = glm::mat3x4(1.0f); 
+};
+
+struct Geometry
 {
     
     std::vector<uint8_t> Vertices;
@@ -22,7 +34,10 @@ struct Mesh
 struct Scene
 {
     std::vector<Camera> Cameras;
+    std::vector<Geometry> Geometries;
+
     std::vector<Mesh> Meshes;
+
 };
 
 
@@ -32,6 +47,9 @@ public:
     Scene LoadGLBMesh(const std::string& path);
 
 private:
+
+
+    void AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Model& model, Scene& outScene);
 
     tinygltf::TinyGLTF mLoader;
 };

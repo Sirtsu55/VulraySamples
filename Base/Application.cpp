@@ -236,7 +236,7 @@ void Application::UpdateCamera()
     if(glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         if(delta.x || delta.y)
-            mCamera.Rotate(-delta.y * DeltaTime, delta.x * DeltaTime, 0);
+            mCamera.Rotate(delta.y * DeltaTime, delta.x * DeltaTime, 0);
     }
     if(glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS)
     {

@@ -22,14 +22,15 @@ void Camera::Rotate(float pitch, float yaw, float roll)
     Up = glm::cross(Right, Front);
 }
 
-glm::mat4 Camera::GetViewMatrix() const 
+
+glm::mat4 Camera::GetViewMatrix() 
 {
     glm::mat4 viewMatrix = glm::mat4_cast(Rotation);
     viewMatrix = glm::translate(viewMatrix, -Position);
     return viewMatrix;
 }
 
-glm::mat4 Camera::GetProjectionMatrix() const 
+glm::mat4 Camera::GetProjectionMatrix() 
 {
     auto projectionMatrix = glm::perspective(glm::radians(Fov), AspectRatio, NearPlane, FarPlane);
     projectionMatrix[1][1] *= -1; // Flip Y axis, now it's y-up
@@ -44,4 +45,11 @@ void Camera::MoveRight(float distance)
 void Camera::MoveForward(float distance) 
 {
     Position += Front * distance * Speed;
+}
+
+void Camera::UpdateDirections()
+{
+    Front = glm::normalize(glm::inverse(Rotation) * glm::vec3(0, 0, -1));
+    Right = glm::normalize(glm::inverse(Rotation) * glm::vec3(1, 0, 0));
+    Up = glm::cross(Right, Front);
 }
