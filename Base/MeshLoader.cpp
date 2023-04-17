@@ -59,8 +59,7 @@ Scene MeshLoader::LoadGLBMesh(const std::string& path)
             outCamera.AspectRatio = camera.perspective.aspectRatio;
             outCamera.NearPlane = camera.perspective.znear;
             outCamera.FarPlane = camera.perspective.zfar;
-            outCamera.Rotation = rotation;
-            outCamera.UpdateDirections();
+            outCamera.Rotate(rotation);
             outCamera.Position = translation;
         }
     }

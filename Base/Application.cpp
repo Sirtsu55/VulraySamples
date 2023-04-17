@@ -231,12 +231,21 @@ void Application::UpdateCamera()
     glfwGetCursorPos(mWindow, &mMousePos.x, &mMousePos.y);
 
     // normalize the mouse position
-    glm::dvec2 delta = (mMousePos - lastMousePos) / glm::dvec2(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height);
+    glm::dvec2 resDividend = glm::dvec2(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height);
+    glm::dvec2 delta = (mMousePos - lastMousePos) / resDividend;
 
     if(glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         if(delta.x || delta.y)
             mCamera.Rotate(delta.y * DeltaTime, delta.x * DeltaTime, 0);
+    }
+    if (glfwGetKey(mWindow, GLFW_KEY_Q) == GLFW_PRESS)
+    {
+        mCamera.Rotate(0, 0, DeltaTime);
+    }
+    if (glfwGetKey(mWindow, GLFW_KEY_E) == GLFW_PRESS)
+    {
+        mCamera.Rotate(0, 0, -DeltaTime);
     }
     if(glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS)
     {

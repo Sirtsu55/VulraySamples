@@ -21,7 +21,9 @@ public:
     void MoveRight(float distance);
     void MoveForward(float distance);
 
-    void Rotate(float pitch, float yaw, float roll); 
+    void Rotate(float pitch, float yaw, float roll);
+    void Rotate(const glm::quat& rotation);
+
 
     glm::vec3 Position;      // Camera position
     glm::quat Rotation;      // Camera rotation
@@ -30,7 +32,9 @@ public:
     float NearPlane;        // Near clipping plane
     float FarPlane;         // Far clipping plane
 
-    float Sensitivity = 100000.f; // Mouse sensitivity
+    float Sensitivity = 75000.0f; // Pitch and Yaw sensitivity
+
+    float RollSensitivity = 100.0f; // Roll sensitivity
     float Speed = 2.5f;       // Camera movement speed
 
     glm::vec3 Front = glm::vec3(0.0, 0.0, -1.0);

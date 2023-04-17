@@ -10,9 +10,9 @@ Camera::Camera(glm::vec3 position, glm::quat rotation, float fov, float aspectRa
 void Camera::Rotate(float pitch, float yaw, float roll) 
 {
 
-    glm::quat pitchQuat = glm::angleAxis(glm::radians(pitch * Sensitivity), glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::quat yawQuat = glm::angleAxis(glm::radians(yaw * Sensitivity), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::quat rollQuat = glm::angleAxis(glm::radians(roll * Sensitivity), glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::quat pitchQuat = glm::angleAxis(glm::radians(pitch * Sensitivity), -Right);
+    glm::quat yawQuat = glm::angleAxis(glm::radians(yaw * Sensitivity), Up);
+    glm::quat rollQuat = glm::angleAxis(glm::radians(roll * RollSensitivity), Front);
 
     Rotation = pitchQuat * Rotation * yawQuat * rollQuat;
 
@@ -20,6 +20,14 @@ void Camera::Rotate(float pitch, float yaw, float roll)
     Front = glm::normalize(glm::inverse(Rotation) * glm::vec3(0, 0, -1));
     Right = glm::normalize(glm::inverse(Rotation) * glm::vec3(1, 0, 0));
     Up = glm::cross(Right, Front);
+
+
+}
+void Camera::Rotate(const glm::quat& rotation)
+{
+    Rotation = rotation * Rotation;
+
+    UpdateDirections();
 }
 
 
