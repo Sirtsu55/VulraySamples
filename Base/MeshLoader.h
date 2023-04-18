@@ -11,11 +11,21 @@ struct Mesh
 {
     std::vector<uint32_t> GeometryReferences;
 
-    // std::vector<uint32_t> MaterialReferences;
-
     // transform is applied to all geometries in the mesh
     // stored in row major order, similar to VkTransformMatrixKHR
     glm::mat3x4 Transform = glm::mat3x4(1.0f); 
+};
+
+struct GeometryMaterial
+{
+    glm::vec4 BaseColorFactor = glm::vec4(1.0f);
+    float MetallicFactor = 1.0f;
+    float RoughnessFactor = 1.0f;
+
+    std::vector<uint8_t> BaseColorTexture;
+    std::vector<uint8_t> MetallicRoughnessTexture;
+    std::vector<uint8_t> NormalTexture;
+    std::vector<uint8_t> OcclusionTexture;
 };
 
 struct Geometry
@@ -29,6 +39,8 @@ struct Geometry
     vk::IndexType IndexFormat = vk::IndexType::eUint32;
     
     glm::mat4 Transform = glm::mat4(1.0f);
+
+    GeometryMaterial Material;
 };
 
 struct Scene

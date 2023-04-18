@@ -66,6 +66,7 @@ Scene MeshLoader::LoadGLBMesh(const std::string& path)
     return outScene;
 }
 
+
 void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Model& model, Scene& outScene)
 {
     auto& outMesh = outScene.Meshes.emplace_back();
@@ -107,6 +108,60 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
             auto size = GetSizeFromType(positionsAccessor.componentType);
             outGeom.VertexSize = components * size;
             outGeom.VertexFormat = ConvertToVkFormat(components, positionsAccessor.componentType);
+        }
+        // get material
+        auto material = primitive.material;
+        if(material != -1)
+        {
+            auto& mat = model.materials[material];
+            auto& pbr = mat.pbrMetallicRoughness;
+            if(pbr.baseColorFactor.size() == 4)
+                outGeom.Material.BaseColorFactor = glm::make_vec4(pbr.baseColorFactor.data());
+            
+            if(pbr.metallicFactor != -1)
+                outGeom.Material.MetallicFactor = pbr.metallicFactor;
+            if(pbr.roughnessFactor != -1)
+                outGeom.Material.RoughnessFactor = pbr.roughnessFactor;
+            if(pbr.baseColorTexture.index != -1)
+            {
+                auto& texture = model.textures[pbr.baseColorTexture.index];
+                auto& image = model.images[texture.source];
+                auto& view = model.bufferViews[image.bufferView];
+                auto& buffer = model.buffers[view.buffer];
+                auto& data = buffer.data;
+                outGeom.Material.BaseColorTexture.resize(view.byteLength);
+                memcpy(outGeom.Material.BaseColorTexture.data(), data.data() + view.byteOffset, view.byteLength);
+            }
+            if(pbr.metallicRoughnessTexture.index != -1)
+            {
+                auto& texture = model.textures[pbr.metallicRoughnessTexture.index];
+                auto& image = model.images[texture.source];
+                auto& view = model.bufferViews[image.bufferView];
+                auto& buffer = model.buffers[view.buffer];
+                auto& data = buffer.data;
+                outGeom.Material.MetallicRoughnessTexture.resize(view.byteLength);
+                memcpy(outGeom.Material.MetallicRoughnessTexture.data(), data.data() + view.byteOffset, view.byteLength);
+            }
+            if(mat.normalTexture.index != -1)
+            {
+                auto& texture = model.textures[mat.normalTexture.index];
+                auto& image = model.images[texture.source];
+                auto& view = model.bufferViews[image.bufferView];
+                auto& buffer = model.buffers[view.buffer];
+                auto& data = buffer.data;
+                outGeom.Material.NormalTexture.resize(view.byteLength);
+                memcpy(outGeom.Material.NormalTexture.data(), data.data() + view.byteOffset, view.byteLength);
+            }
+            if(mat.occlusionTexture.index != -1)
+            {
+                auto& texture = model.textures[mat.occlusionTexture.index];
+                auto& image = model.images[texture.source];
+                auto& view = model.bufferViews[image.bufferView];
+                auto& buffer = model.buffers[view.buffer];
+                auto& data = buffer.data;
+                outGeom.Material.OcclusionTexture.resize(view.byteLength);
+                memcpy(outGeom.Material.OcclusionTexture.data(), data.data() + view.byteOffset, view.byteLength);
+            }
         }
     }
 }
