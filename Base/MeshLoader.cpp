@@ -115,9 +115,12 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
         {
             auto& mat = model.materials[material];
             auto& pbr = mat.pbrMetallicRoughness;
+
+            if(mat.emissiveFactor.size() == 3)
+                outGeom.Material.EmissiveFactor = glm::make_vec4(pbr.baseColorFactor.data());
+
             if(pbr.baseColorFactor.size() == 4)
                 outGeom.Material.BaseColorFactor = glm::make_vec4(pbr.baseColorFactor.data());
-            
             if(pbr.metallicFactor != -1)
                 outGeom.Material.MetallicFactor = pbr.metallicFactor;
             if(pbr.roughnessFactor != -1)
@@ -151,16 +154,6 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
                 auto& data = buffer.data;
                 outGeom.Material.NormalTexture.resize(view.byteLength);
                 memcpy(outGeom.Material.NormalTexture.data(), data.data() + view.byteOffset, view.byteLength);
-            }
-            if(mat.occlusionTexture.index != -1)
-            {
-                auto& texture = model.textures[mat.occlusionTexture.index];
-                auto& image = model.images[texture.source];
-                auto& view = model.bufferViews[image.bufferView];
-                auto& buffer = model.buffers[view.buffer];
-                auto& data = buffer.data;
-                outGeom.Material.OcclusionTexture.resize(view.byteLength);
-                memcpy(outGeom.Material.OcclusionTexture.data(), data.data() + view.byteOffset, view.byteLength);
             }
         }
     }

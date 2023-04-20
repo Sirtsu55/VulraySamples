@@ -6,13 +6,23 @@
 #include "MeshLoader.h"
 #include <filesystem>
 
+enum class MaterialType : uint32_t
+{
+    Opaque = 0, // opaque material
+    Emissive = 1 // emissive material
+};
+
 struct GPUMaterial // has to be aligned to 16 bytes
 {
-    glm::vec4 BaseColor = glm::vec4(1.0f);
+    glm::vec3 BaseColor = glm::vec3(1.0f);
     float Metallic = 1.0f;
+    
+    glm::vec3 Emissive = glm::vec3(0.0f);
     float Roughness = 1.0f;
-    float Padding[2]; // add padding to make sure the struct is 16 byte aligned
-};
+    MaterialType Type; // add padding to make sure the struct is 16 byte aligned
+
+    float Padding[3];
+}; 
 
 class MeshMaterials : public Application
 {
@@ -148,7 +158,7 @@ void MeshMaterials::CreateAS()
         blasinfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
         // [POI]
         // The materials are stored like this  
-        // The instance ID is n Meshes + n Geometries
+        // The instance ID for the TLAS is n Meshes + n Geometries
         // if Mesh at index 0 has 2 geometries, the instance ID for the first geometry is 0 and the second Mesh is 2, because there 
         // are 2 materials before the second mesh, because Mesh 0 has 2 geometries.
         // Similarly, if Mesh at index 1 has 3 geometries, the next Mesh Instance ID is 2(Geometries) + 3(Geometries) = 5
@@ -172,6 +182,7 @@ void MeshMaterials::CreateAS()
             mat.BaseColor = geom.Material.BaseColorFactor;
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
+            mat.Type = MaterialType::Opaque;
 
 			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size());
 			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size());
@@ -280,7 +291,9 @@ void MeshMaterials::CreateRTPipeline()
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
-        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),
+        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer,
+        vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eCallableKHR,
+        1, &mMaterialBuffer)
     };
 
 
@@ -299,6 +312,22 @@ void MeshMaterials::CreateRTPipeline()
     mSBT.MissShaders.push_back(shaderModule);
     mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
     mSBT.MissShaders.back().EntryPoint = "miss";
+
+    // [POI]
+    // Add Callable shaders so that we can shade the emissive materials and opaque materials 
+    // Callable shader are an efficient way to split up work in a workgroup without if-else statements that would 
+    // otherwise hinder the ray tracing performance
+
+    // Callable Shader at index 0 is the opaque material
+    mSBT.CallableShaders.push_back(shaderModule);
+    mSBT.CallableShaders.back().Stage = vk::ShaderStageFlagBits::eCallableKHR;
+    mSBT.CallableShaders.back().EntryPoint = "opqshading";
+
+    // Callable Shader at index 1 is the opaque material
+    mSBT.CallableShaders.push_back(shaderModule);
+    mSBT.CallableShaders.back().Stage = vk::ShaderStageFlagBits::eCallableKHR;
+    mSBT.CallableShaders.back().EntryPoint = "eshading";
+
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;

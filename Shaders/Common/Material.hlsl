@@ -1,9 +1,17 @@
 
+// This needs to match the index in c++ code
+enum MaterialType : unsigned int
+{
+    Opaque = 0, // opaque material
+    Emissive = 1 // emissive material
+};
 
 struct GPUMaterial // has to be aligned to 16 bytes
 {
-    float4 BaseColor;
+    float3 BaseColor;
     float Metallic;
+    float3 Emissive;
     float Roughness;
-    float2 Padding; // add padding to make sure the struct is 16 byte aligned
+    unsigned int Type;
+    float3 Padding;
 };

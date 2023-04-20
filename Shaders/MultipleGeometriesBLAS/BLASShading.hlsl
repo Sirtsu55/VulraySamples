@@ -10,9 +10,8 @@
 [[vk::binding(3, 0)]] RWStructuredBuffer<GPUMaterial> materials;
 
 
-struct Attribute
-{
-  float2 attribs;
+struct CallData {
+  float3 Color;
 };
 
 struct Payload
@@ -59,7 +58,15 @@ void chit(inout Payload p, in float2 attribs)
 
 	GPUMaterial mat = materials[matIndex];
 
-  	p.hitValue = mat.BaseColor.xyz;
+	unsigned int matType = mat.Type;
+
+	CallData data;
+
+	CallShader(matType, data);
+
+  	p.hitValue = data.Color;
+
+	
 }
 
 
@@ -67,4 +74,17 @@ void chit(inout Payload p, in float2 attribs)
 void miss(inout Payload p)
 {
     p.hitValue = float3(0.0, 0.0, 0.2);
+}
+
+
+[shader("callable")]
+void eshading(inout CallData data)
+{
+	data.Color = float3(1.0, 0.0, 0.0);
+}
+
+[shader("callable")]
+void opqshading(inout CallData data)
+{
+	data.Color = float3(1.0, 1.0, 1.0);
 }
