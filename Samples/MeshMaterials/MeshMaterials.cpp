@@ -182,7 +182,7 @@ void MeshMaterials::CreateAS()
             mat.BaseColor = geom.Material.BaseColorFactor;
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
-            mat.Type = MaterialType::Opaque;
+            mat.Type = MaterialType::Emissive;
 
 			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size());
 			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size());
