@@ -189,7 +189,7 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
     // if the vector is empty, then the device addresses used to build the source BLAS will be used
     // this line can be removed, but to demonstrate how to use it, we will set the device addresses to the new ones, although they remain unchanged
     
-    updateInfo.UpdatedGeometryAddresses.push_back(vr::GeometryDeviceAddress(mVertexBuffer.DevAddress, mIndexBuffer.DevAddress));
+    updateInfo.NewGeometryAddresses.push_back(vr::GeometryDeviceAddress(mVertexBuffer.DevAddress, mIndexBuffer.DevAddress));
 
 
 

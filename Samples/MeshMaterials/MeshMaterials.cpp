@@ -80,7 +80,7 @@ void MeshMaterials::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box2.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
@@ -251,6 +251,9 @@ void MeshMaterials::CreateAS()
 
     mVRDev->UpdateBuffer(InstanceBuffer, instances.data(), sizeof(vk::AccelerationStructureInstanceKHR) * instances.size());
 
+    // create the scratch buffers
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfos);
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
 
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
@@ -259,11 +262,12 @@ void MeshMaterials::CreateAS()
 
     // build the AS
 
-    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    mVRDev->BuildBLAS(buildInfos, buildCmd); 
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd); 
 
-    auto TLASScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, instances.size(), buildCmd); 
+
+    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, instances.size(), buildCmd); 
 
     buildCmd.end();
 
