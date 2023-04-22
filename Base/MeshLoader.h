@@ -21,11 +21,11 @@ struct GeometryMaterial
     glm::vec4 BaseColorFactor = glm::vec4(1.0f);
     float MetallicFactor = 1.0f;
     float RoughnessFactor = 1.0f;
+    glm::vec3 EmissiveFactor = glm::vec3(0.0f);
 
     std::vector<uint8_t> BaseColorTexture;
     std::vector<uint8_t> MetallicRoughnessTexture;
     std::vector<uint8_t> NormalTexture;
-    std::vector<uint8_t> OcclusionTexture;
 };
 
 struct Geometry
