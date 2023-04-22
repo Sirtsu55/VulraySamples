@@ -80,7 +80,7 @@ void MeshMaterials::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box2.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/monkey.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
@@ -175,7 +175,7 @@ void MeshMaterials::CreateAS()
 			geomData.PrimitiveCount = geom.Indices.size() / geom.IndexSize / 3;
 			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset;
 			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset;
-			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress;
+			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress + transOffset;
 			blasinfo.Geometries.push_back(geomData);
 			
             GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
@@ -196,6 +196,7 @@ void MeshMaterials::CreateAS()
         memcpy(transData + transOffset, &mesh.Transform, sizeof(vk::TransformMatrixKHR));
         transOffset += sizeof(vk::TransformMatrixKHR);
     }
+
 
     mVRDev->UnmapBuffer(mVertexBuffer);
     mVRDev->UnmapBuffer(mIndexBuffer);
@@ -305,7 +306,7 @@ void MeshMaterials::CreateRTPipeline()
     
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/MultipleGeometriesBLAS/BLASShading.hlsl");
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulGeometry/ColorfulGeometry.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     mSBT.RayGenShader = shaderModule;
@@ -316,22 +317,6 @@ void MeshMaterials::CreateRTPipeline()
     mSBT.MissShaders.push_back(shaderModule);
     mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
     mSBT.MissShaders.back().EntryPoint = "miss";
-
-    // [POI]
-    // Add Callable shaders so that we can shade the emissive materials and opaque materials 
-    // Callable shader are an efficient way to split up work in a workgroup without if-else statements that would 
-    // otherwise hinder the ray tracing performance
-
-    // Callable Shader at index 0 is the opaque material
-    mSBT.CallableShaders.push_back(shaderModule);
-    mSBT.CallableShaders.back().Stage = vk::ShaderStageFlagBits::eCallableKHR;
-    mSBT.CallableShaders.back().EntryPoint = "opqshading";
-
-    // Callable Shader at index 1 is the opaque material
-    mSBT.CallableShaders.push_back(shaderModule);
-    mSBT.CallableShaders.back().Stage = vk::ShaderStageFlagBits::eCallableKHR;
-    mSBT.CallableShaders.back().EntryPoint = "eshading";
-
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;

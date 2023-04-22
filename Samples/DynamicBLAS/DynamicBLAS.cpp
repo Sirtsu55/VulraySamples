@@ -101,6 +101,8 @@ void DynamicBLAS::CreateAS()
 
    std::tie(mBLASHandle, mBLASBuildInfo) = mVRDev->CreateBLAS(blasCreateInfo); 
 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(mBLASBuildInfo);
+
     // create a TLAS
     vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
@@ -109,6 +111,8 @@ void DynamicBLAS::CreateAS()
     auto [tlasHandle, tlasBuildInfo] = mVRDev->CreateTLAS(tlasCreateInfo);
 
     mTLASHandle = tlasHandle;
+
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
 
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance
@@ -137,11 +141,11 @@ void DynamicBLAS::CreateAS()
 
     std::vector<vr::BLASBuildInfo> buildInfos = { mBLASBuildInfo }; 
     
-    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    mVRDev->BuildBLAS(buildInfos, buildCmd); 
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd); // Add a barrier to the command buffer to make sure the BLAS build is finished before the TLAS build starts
 
-    auto TLASScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd); 
+    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd); 
 
     buildCmd.end();
 
@@ -185,27 +189,30 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 
     updateInfo.SourceBLAS = &mBLASHandle;
     updateInfo.SourceBuildInfo = mBLASBuildInfo;
+
     // [POI] This vector has to be the same size as the vector of geometries in the BLASCreateInfo if using new device addresses / buffers
     // if the vector is empty, then the device addresses used to build the source BLAS will be used
     // this line can be removed, but to demonstrate how to use it, we will set the device addresses to the new ones, although they remain unchanged
-    
     updateInfo.NewGeometryAddresses.push_back(vr::GeometryDeviceAddress(mVertexBuffer.DevAddress, mIndexBuffer.DevAddress));
 
 
 
     auto buildInfo = mVRDev->UpdateBLAS(updateInfo);
 
-
-    auto newScratch = mVRDev->BuildBLAS({ buildInfo }, cmd, &mUpdateScratchBuffer);
-    mVRDev->AddAccelerationBuildBarrier(cmd);
-    //if they are the same size, then BuildBLAS returned the same buffer, leave as it is
-    // but if they are different, then BuildBLAS returned a new buffer, so destroy the old one and set the new one
-    if (newScratch.Size != mUpdateScratchBuffer.Size)
+    // [POI] if new scratch size is bigger than the old one, then we need to allocate a new scratch buffer
+    if(buildInfo.BuildSizes.updateScratchSize > mUpdateScratchBuffer.Size)
     {
-        if(mUpdateScratchBuffer.Size > 0)
+        if(mUpdateScratchBuffer.Size > 0) // if the old scratch buffer is not empty, destroy it
             mVRDev->DestroyBuffer(mUpdateScratchBuffer);
-        mUpdateScratchBuffer = newScratch;
+
+        // [POI]
+        // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo 
+        mUpdateScratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo, vk::BuildAccelerationStructureModeKHR::eUpdate);
     }
+
+
+    mVRDev->BuildBLAS({ buildInfo }, cmd);
+    mVRDev->AddAccelerationBuildBarrier(cmd);
 }
 
 

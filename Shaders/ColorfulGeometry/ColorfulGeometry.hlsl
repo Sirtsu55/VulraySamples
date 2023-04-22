@@ -58,13 +58,7 @@ void chit(inout Payload p, in float2 attribs)
 
 	GPUMaterial mat = materials[matIndex];
 
-	unsigned int matType = mat.Type;
-
-	CallData data;
-
-	CallShader(matType, data);
-
-  	p.hitValue = data.Color;
+  	p.hitValue = mat.BaseColor;
 
 	
 }
@@ -76,15 +70,3 @@ void miss(inout Payload p)
     p.hitValue = float3(0.0, 0.0, 0.2);
 }
 
-
-[shader("callable")]
-void eshading(inout CallData data)
-{
-	data.Color = float3(1.0, 0.0, 0.0);
-}
-
-[shader("callable")]
-void opqshading(inout CallData data)
-{
-	data.Color = float3(1.0, 1.0, 1.0);
-}

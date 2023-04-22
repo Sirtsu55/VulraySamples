@@ -103,6 +103,8 @@ void DynamicTLAS::CreateAS()
 
    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo); 
+
     mBLASHandle = blasHandle;
     
     // [POI]
@@ -127,7 +129,7 @@ void DynamicTLAS::CreateAS()
 
     std::vector<vr::BLASBuildInfo> buildInfos = { buildInfo }; 
     
-    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    mVRDev->BuildBLAS(buildInfos, buildCmd); 
 
     buildCmd.end();
 
@@ -196,18 +198,20 @@ void DynamicTLAS::UpdateTLAS(vk::CommandBuffer cmd)
     // NVIDIA best practices: https://developer.nvidia.com/blog/rtx-best-practices/ 
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo, true);
 
-    auto newScratch = mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), buildCmd, &mScratchBuffer);
+    // if the new build scratch size is greater than the old one, we have to create a new scratch buffer
+    // NOTE: When updating a TLAS Vulray actually recreates it, so we have to use buildScratchSize instead of updateScratchSize
+    if(mTLASBuildInfo.BuildSizes.buildScratchSize > mScratchBuffer.Size)
+    {
+        if(mScratchBuffer.Size > 0) // if not null
+            mVRDev->DestroyBuffer(mScratchBuffer);
+
+        mScratchBuffer = mVRDev->CreateScratchBufferTLAS(mTLASBuildInfo);
+    }
+
+    mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), buildCmd);
 
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd);
-    //if they are the same size, then BuildBLAS returned the same buffer, leave as it is
-    // but if they are different, then BuildBLAS returned a new buffer, so destroy the old one and set the new one
-    if (newScratch.Size != mScratchBuffer.Size)
-    {
-        if(mScratchBuffer.Size > 0)
-            mVRDev->DestroyBuffer(mScratchBuffer);
-        mScratchBuffer = newScratch;
-    }
 
     buildCmd.end();
 
