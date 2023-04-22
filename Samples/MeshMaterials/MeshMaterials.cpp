@@ -80,7 +80,7 @@ void MeshMaterials::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/monkey.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
