@@ -30,20 +30,20 @@ Scene MeshLoader::LoadGLBMesh(const std::string& path)
 
         if(node.matrix.size() == 16)
             matrix = node.matrix.size() == 16 ? glm::make_mat4(node.matrix.data()) : glm::dmat4(1.0f);
-        if (node.scale.size() == 3)
+        if(node.translation.size() == 3)
         {
-            scale = glm::make_vec3(node.scale.data());
-            matrix = glm::scale(matrix, scale);
+            translation = glm::vec3(node.translation[0], node.translation[1], node.translation[2]);
+            matrix = glm::translate(matrix, translation);
         }
         if(node.rotation.size() == 4)
         {
             rotation = glm::quat(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]);
 			matrix = matrix * glm::mat4_cast(rotation);
         }
-        if(node.translation.size() == 3)
+        if (node.scale.size() == 3)
         {
-            translation = glm::vec3(node.translation[0], node.translation[1], node.translation[2]);
-            matrix = glm::translate(matrix, translation);
+            scale = glm::make_vec3(node.scale.data());
+            matrix = glm::scale(matrix, scale);
         }
         if (node.mesh != -1)
         {
