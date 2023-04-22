@@ -22,6 +22,7 @@ to see what is declared there and [Apllication.cpp](https://github.com/Sirtsu55/
 
 - Points of Intrest are marked by ```[POI]``` in the Samples
 
+- Move Freely in the scene using `WASD` and rotate camera by `left-click + mouse` and roll camera by `Q-E`
 ### Samples Overview
 | Sample		|  Description  |
 |:----------	|:------------- |
