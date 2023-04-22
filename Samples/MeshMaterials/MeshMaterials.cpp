@@ -6,13 +6,23 @@
 #include "MeshLoader.h"
 #include <filesystem>
 
+enum class MaterialType : uint32_t
+{
+    Opaque = 0, // opaque material
+    Emissive = 1 // emissive material
+};
+
 struct GPUMaterial // has to be aligned to 16 bytes
 {
-    glm::vec4 BaseColor = glm::vec4(1.0f);
+    glm::vec3 BaseColor = glm::vec3(1.0f);
     float Metallic = 1.0f;
+    
+    glm::vec3 Emissive = glm::vec3(0.0f);
     float Roughness = 1.0f;
-    float Padding[2]; // add padding to make sure the struct is 16 byte aligned
-};
+    MaterialType Type; // add padding to make sure the struct is 16 byte aligned
+
+    float Padding[3];
+}; 
 
 class MeshMaterials : public Application
 {
@@ -70,7 +80,7 @@ void MeshMaterials::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/monkey.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
@@ -148,7 +158,7 @@ void MeshMaterials::CreateAS()
         blasinfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
         // [POI]
         // The materials are stored like this  
-        // The instance ID is n Meshes + n Geometries
+        // The instance ID for the TLAS is n Meshes + n Geometries
         // if Mesh at index 0 has 2 geometries, the instance ID for the first geometry is 0 and the second Mesh is 2, because there 
         // are 2 materials before the second mesh, because Mesh 0 has 2 geometries.
         // Similarly, if Mesh at index 1 has 3 geometries, the next Mesh Instance ID is 2(Geometries) + 3(Geometries) = 5
@@ -165,13 +175,14 @@ void MeshMaterials::CreateAS()
 			geomData.PrimitiveCount = geom.Indices.size() / geom.IndexSize / 3;
 			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset;
 			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset;
-			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress;
+			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress + transOffset;
 			blasinfo.Geometries.push_back(geomData);
 			
             GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
             mat.BaseColor = geom.Material.BaseColorFactor;
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
+            mat.Type = MaterialType::Emissive;
 
 			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size());
 			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size());
@@ -185,6 +196,7 @@ void MeshMaterials::CreateAS()
         memcpy(transData + transOffset, &mesh.Transform, sizeof(vk::TransformMatrixKHR));
         transOffset += sizeof(vk::TransformMatrixKHR);
     }
+
 
     mVRDev->UnmapBuffer(mVertexBuffer);
     mVRDev->UnmapBuffer(mIndexBuffer);
@@ -240,6 +252,9 @@ void MeshMaterials::CreateAS()
 
     mVRDev->UpdateBuffer(InstanceBuffer, instances.data(), sizeof(vk::AccelerationStructureInstanceKHR) * instances.size());
 
+    // create the scratch buffers
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfos);
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
 
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
@@ -248,11 +263,12 @@ void MeshMaterials::CreateAS()
 
     // build the AS
 
-    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    mVRDev->BuildBLAS(buildInfos, buildCmd); 
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd); 
 
-    auto TLASScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, instances.size(), buildCmd); 
+
+    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, instances.size(), buildCmd); 
 
     buildCmd.end();
 
@@ -280,7 +296,9 @@ void MeshMaterials::CreateRTPipeline()
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
-        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),
+        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer,
+        vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eCallableKHR,
+        1, &mMaterialBuffer)
     };
 
 
@@ -288,7 +306,7 @@ void MeshMaterials::CreateRTPipeline()
     
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/MultipleGeometriesBLAS/BLASShading.hlsl");
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulGeometry/ColorfulGeometry.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     mSBT.RayGenShader = shaderModule;

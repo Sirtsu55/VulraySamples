@@ -30,22 +30,21 @@ Scene MeshLoader::LoadGLBMesh(const std::string& path)
 
         if(node.matrix.size() == 16)
             matrix = node.matrix.size() == 16 ? glm::make_mat4(node.matrix.data()) : glm::dmat4(1.0f);
+        if(node.translation.size() == 3)
+        {
+            translation = glm::vec3(node.translation[0], node.translation[1], node.translation[2]);
+            matrix = glm::translate(matrix, translation);
+        }
         if(node.rotation.size() == 4)
         {
             rotation = glm::quat(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]);
-			matrix = glm::mat4_cast(rotation);
+			matrix = matrix * glm::mat4_cast(rotation);
         }
-        if(node.translation.size() == 3)
-        {
-            translation = glm::make_vec3(node.translation.data());
-            matrix = glm::translate(matrix, translation);
-        }
-        if(node.scale.size() == 3)
+        if (node.scale.size() == 3)
         {
             scale = glm::make_vec3(node.scale.data());
             matrix = glm::scale(matrix, scale);
         }
-
         if (node.mesh != -1)
         {
             AddMeshToScene(model.meshes[node.mesh], model, outScene);
@@ -62,6 +61,7 @@ Scene MeshLoader::LoadGLBMesh(const std::string& path)
             outCamera.Rotate(rotation);
             outCamera.Position = translation;
         }
+
     }
     return outScene;
 }
@@ -115,9 +115,12 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
         {
             auto& mat = model.materials[material];
             auto& pbr = mat.pbrMetallicRoughness;
+
+            if(mat.emissiveFactor.size() == 3)
+                outGeom.Material.EmissiveFactor = glm::make_vec4(pbr.baseColorFactor.data());
+
             if(pbr.baseColorFactor.size() == 4)
                 outGeom.Material.BaseColorFactor = glm::make_vec4(pbr.baseColorFactor.data());
-            
             if(pbr.metallicFactor != -1)
                 outGeom.Material.MetallicFactor = pbr.metallicFactor;
             if(pbr.roughnessFactor != -1)
@@ -151,16 +154,6 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
                 auto& data = buffer.data;
                 outGeom.Material.NormalTexture.resize(view.byteLength);
                 memcpy(outGeom.Material.NormalTexture.data(), data.data() + view.byteOffset, view.byteLength);
-            }
-            if(mat.occlusionTexture.index != -1)
-            {
-                auto& texture = model.textures[mat.occlusionTexture.index];
-                auto& image = model.images[texture.source];
-                auto& view = model.bufferViews[image.bufferView];
-                auto& buffer = model.buffers[view.buffer];
-                auto& data = buffer.data;
-                outGeom.Material.OcclusionTexture.resize(view.byteLength);
-                memcpy(outGeom.Material.OcclusionTexture.data(), data.data() + view.byteOffset, view.byteLength);
             }
         }
     }

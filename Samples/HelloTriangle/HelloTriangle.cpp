@@ -106,6 +106,9 @@ void HelloTriangle::CreateAS()
 	// it creates acceleration structure and allocates memory for it and scratch memory
     auto[blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
+    // Create a scratch buffer for the BLAS build
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(blasBuildInfo); 
+
     mBLASHandle = blasHandle;
 
     // [POI]
@@ -118,6 +121,9 @@ void HelloTriangle::CreateAS()
 
     mTLASHandle = tlasHandle;
 
+    // Create the scratch buffer for TLAS build
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
+    
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance
 
@@ -142,6 +148,7 @@ void HelloTriangle::CreateAS()
     mVRDev->UpdateBuffer(InstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
 
+
     // create a command buffer to build the BLAS and TLAS, mGraphicsPool is a command pool that is created in the Base Application class
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
@@ -152,13 +159,14 @@ void HelloTriangle::CreateAS()
     // build the AS
     std::vector<vr::BLASBuildInfo> buildInfos = { blasBuildInfo }; // We can have multiple BLAS builds at once, but we only have one for now
 
-    auto BLASscratchBuffer = mVRDev->BuildBLAS(buildInfos, buildCmd); // Add build commands to command buffer and retrieve scratch buffer for the build 
+    mVRDev->BuildBLAS(buildInfos, buildCmd); // Add build commands to command buffer and retrieve scratch buffer for the build 
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd); // Add a barrier to the command buffer to make sure the BLAS build is finished before the TLAS build starts
 
     // Add build commands to command buffer and retrieve scratch buffer for the build
     // We can reuse the scratch buffer from here to update the TLAS, but for now we don't update
-    auto TLASScratchBuffer = mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd); 
+
+    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd); 
 
     buildCmd.end();
 

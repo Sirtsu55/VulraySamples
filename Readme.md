@@ -14,10 +14,18 @@ to see what is declared there and [Apllication.cpp](https://github.com/Sirtsu55/
 - C++ 20 compiler
 
 ### Samples Structure
-- ```Application::Start()``` - Called once when launching
-- ```Application::Update(...)``` - Called every frame
-- ```Application::Stop()``` - Called when quitting window
-- Samples have helper functions to spit the code
+- `Base` Directory: Helper classes and functions
 
-### Go and look at the samples...
+- `Shaders` Directory: All the shaders 
+
+- `Assets` Directory: GLB 3D model files
+
 - Points of Intrest are marked by ```[POI]``` in the Samples
+
+### Samples Overview
+| Sample		|  Description  |
+|:----------	|:------------- |
+| HelloTriangle | Simple triangle, with barycentric colors |
+| DynamicTLAS   | Moving Triangles by updating TLAS every frame with different instance transforms |
+| DynamicBLAS   | Transforming the scale of the BLAS every frame by updating it's vertex positions |
+| Mesh Materials| This sample demonstrates how to organize geometries of a real scene into BLASses by loading a GLB scene and creating a BLAS for every mesh in the scene. Furthermore, uploads the material properties to the GPU and shades the geometries using their base color; no lighting yet.|
