@@ -6,6 +6,7 @@
 #include <tiny_gltf.h>
 #include "Camera.h"
 #include <glm/gtx/matrix_major_storage.hpp>
+#include "GPUMaterial.h"
 
 struct Mesh
 {
@@ -31,12 +32,9 @@ struct GeometryMaterial
 struct Geometry
 {
     
-    std::vector<uint8_t> Vertices;
-    std::vector<uint8_t> Indices;
+    std::vector<Vertex> Vertices;
+    std::vector<uint32_t> Indices;
     uint32_t VertexSize = 0;
-    vk::Format VertexFormat = vk::Format::eR32G32B32Sfloat;
-    uint32_t IndexSize = 0;
-    vk::IndexType IndexFormat = vk::IndexType::eUint32;
     
     glm::mat4 Transform = glm::mat4(1.0f);
 
@@ -61,7 +59,7 @@ public:
 private:
 
 
-    void AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Model& model, Scene& outScene);
+    void AddMeshToScene(const tinygltf::Mesh& mesh, tinygltf::Model& model, Scene& outScene);
 
     tinygltf::TinyGLTF mLoader;
 };

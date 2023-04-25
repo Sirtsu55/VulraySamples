@@ -199,6 +199,10 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 
     auto buildInfo = mVRDev->UpdateBLAS(updateInfo);
 
+    // [POI] bind the scratch buffer to the build info
+    // it's a new build info, so we need to bind the scratch buffer to it, since it doesn't know about the scratch buffer
+    mVRDev->BindScratchBufferToBuildInfo(mUpdateScratchBuffer.DevAddress, buildInfo);
+
     // [POI] if new scratch size is bigger than the old one, then we need to allocate a new scratch buffer
     if(buildInfo.BuildSizes.updateScratchSize > mUpdateScratchBuffer.Size)
     {
@@ -207,6 +211,7 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 
         // [POI]
         // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo 
+        // Also we don't need to explicitly bind the scratch buffer to the build info, because this function does that internally for us
         mUpdateScratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo, vk::BuildAccelerationStructureModeKHR::eUpdate);
     }
 

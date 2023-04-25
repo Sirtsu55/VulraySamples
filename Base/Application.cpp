@@ -148,7 +148,7 @@ void Application::BeginFrame()
 void Application::WaitForRendering()
 {
     //Wait for the fence to be signaled by the GPU
-    auto _ = mDevice.waitForFences(mRenderFence, true, UINT64_MAX);
+    auto _ = mDevice.waitForFences(mRenderFence, true, 1000000000);
     //Reset the fence
     mDevice.resetFences(mRenderFence);
 

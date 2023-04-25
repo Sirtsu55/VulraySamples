@@ -4,25 +4,8 @@
 #include "FileRead.h"
 #include "ShaderCompiler.h"
 #include "MeshLoader.h"
-#include <filesystem>
+#include "GPUMaterial.h"
 
-enum class MaterialType : uint32_t
-{
-    Opaque = 0, // opaque material
-    Emissive = 1 // emissive material
-};
-
-struct GPUMaterial // has to be aligned to 16 bytes
-{
-    glm::vec3 BaseColor = glm::vec3(1.0f);
-    float Metallic = 1.0f;
-    
-    glm::vec3 Emissive = glm::vec3(0.0f);
-    float Roughness = 1.0f;
-    MaterialType Type; // add padding to make sure the struct is 16 byte aligned
-
-    float Padding[3];
-}; 
 
 class MeshMaterials : public Application
 {
@@ -99,9 +82,8 @@ void MeshMaterials::CreateAS()
     {
         for (auto& geomRef : mesh.GeometryReferences)
         {
-            vertBufferSize += geometries[geomRef].Vertices.size();
-            vertBufferSize += sizeof(uint32_t);
-            idxBufferSize += geometries[geomRef].Indices.size();
+            vertBufferSize += geometries[geomRef].Vertices.size() * sizeof(Vertex);
+            idxBufferSize += geometries[geomRef].Indices.size() * sizeof(uint32_t);
             matBufferSize += sizeof(GPUMaterial);
         }
         transBufferSize += sizeof(vk::TransformMatrixKHR);
@@ -123,7 +105,7 @@ void MeshMaterials::CreateAS()
     mMaterialBuffer = mVRDev->CreateBuffer(
         matBufferSize, 
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
+        vk::BufferUsageFlagBits::eStorageBuffer
     );
 
     // Create a buffer to store the transform for the BLAS
@@ -147,8 +129,8 @@ void MeshMaterials::CreateAS()
     uint32_t transOffset = 0;
     uint32_t matOffset = 0;
 
-    char* vertData = (char*)mVRDev->MapBuffer(mVertexBuffer);
-    char* idxData = (char*)mVRDev->MapBuffer(mIndexBuffer);
+    Vertex* vertData = (Vertex*)mVRDev->MapBuffer(mVertexBuffer);
+    uint32_t* idxData = (uint32_t*)mVRDev->MapBuffer(mIndexBuffer);
     char* transData = (char*)mVRDev->MapBuffer(mTransformBuffer);
     char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
 
@@ -169,12 +151,12 @@ void MeshMaterials::CreateAS()
         {
 			auto& geom = geometries[geomRef];
 			vr::GeometryData geomData = {};
-			geomData.VertexFormat = geom.VertexFormat;
-			geomData.Stride = geom.VertexSize;
-			geomData.IndexFormat = geom.IndexFormat;
-			geomData.PrimitiveCount = geom.Indices.size() / geom.IndexSize / 3;
-			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset;
-			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset;
+			geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
+			geomData.Stride = sizeof(Vertex);
+			geomData.IndexFormat = vk::IndexType::eUint32;
+			geomData.PrimitiveCount = geom.Indices.size() / 3;
+			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset * sizeof(Vertex);
+			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset * sizeof(uint32_t);
 			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress + transOffset;
 			blasinfo.Geometries.push_back(geomData);
 			
@@ -183,12 +165,14 @@ void MeshMaterials::CreateAS()
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
             mat.Type = MaterialType::Emissive;
+            mat.VertBufferOffset = vertOffset;
+            mat.IndexBufferOffset = idxOffset;
 
-			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size());
-			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size());
+			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size() * sizeof(Vertex));
+			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size() * sizeof(uint32_t));
             memcpy(matData + matOffset, &mat, sizeof(GPUMaterial));
 
-			vertOffset += geom.Vertices.size(); // the size is in bytes
+			vertOffset += geom.Vertices.size();
 			idxOffset += geom.Indices.size();
             matOffset += sizeof(GPUMaterial); // material for each geometry
 		}
@@ -296,9 +280,7 @@ void MeshMaterials::CreateRTPipeline()
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
-        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer,
-        vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eCallableKHR,
-        1, &mMaterialBuffer)
+        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer)
     };
 
 

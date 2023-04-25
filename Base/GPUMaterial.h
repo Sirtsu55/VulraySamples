@@ -1,9 +1,17 @@
+#pragma once
+
 #include <glm/glm.hpp>
 
 enum class MaterialType : uint32_t
 {
     Opaque = 0, // opaque material
     Emissive = 1 // emissive material
+};
+
+struct Vertex
+{
+    glm::vec3 Position;
+    float padding; // this is to assure layout requirements when accessing from SSBO in shaders
 };
 
 struct GPUMaterial // has to be aligned to 16 bytes
@@ -15,5 +23,8 @@ struct GPUMaterial // has to be aligned to 16 bytes
     float Roughness = 1.0f;
     MaterialType Type; // add padding to make sure the struct is 16 byte aligned
 
-    float Padding[3];
+    uint32_t VertBufferOffset = 0;
+    uint32_t IndexBufferOffset = 0;
+
+    float Padding;
 }; 

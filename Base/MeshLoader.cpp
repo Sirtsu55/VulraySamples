@@ -67,7 +67,7 @@ Scene MeshLoader::LoadGLBMesh(const std::string& path)
 }
 
 
-void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Model& model, Scene& outScene)
+void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, tinygltf::Model& model, Scene& outScene)
 {
     auto& outMesh = outScene.Meshes.emplace_back();
     for (auto& primitive : mesh.primitives)
@@ -85,13 +85,31 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
             auto& indicesView = model.bufferViews[indicesAccessor.bufferView];
             auto& indicesBuffer = model.buffers[indicesView.buffer];
             auto& indicesData = indicesBuffer.data;
-            outGeom.Indices.resize(indicesView.byteLength);
-            memcpy(outGeom.Indices.data(), indicesData.data() + indicesView.byteOffset, indicesView.byteLength);
+            outGeom.Indices.resize(indicesAccessor.count);
 
             auto components = GetComponentsFromTinyGLTFType(indicesAccessor.type);
             auto size = GetSizeFromType(indicesAccessor.componentType);
-            outGeom.IndexSize = components * size;
-            outGeom.IndexFormat = ConvertToIndexType(indicesAccessor.componentType);
+
+            // size == 4, uint32_t is 4 bytes, components == 1, scalar is 1 component   
+            if(size == 4 && components == 1)
+            {
+                auto* data = reinterpret_cast<uint32_t*>(indicesData.data() + indicesView.byteOffset);
+                for (int i = 0; i < indicesAccessor.count; i++)
+                {
+                    outGeom.Indices[i] = data[i];
+                }
+            }
+            else if(size == 2 && components == 1)
+            {
+                auto* data = reinterpret_cast<uint16_t*>(indicesData.data() + indicesView.byteOffset);
+                for (int i = 0; i < indicesAccessor.count; i++)
+                {
+                    outGeom.Indices[i] = data[i];
+                }
+            }
+            else
+                throw std::runtime_error("Unsupported index type");
+
         }
         // Get positions
         auto positions = primitive.attributes.find("POSITION");
@@ -101,13 +119,31 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, const tinygltf::Mode
             auto& positionsView = model.bufferViews[positionsAccessor.bufferView];
             auto& positionsBuffer = model.buffers[positionsView.buffer];
             auto& positionsData = positionsBuffer.data;
-            outGeom.Vertices.resize(positionsView.byteLength);
-            memcpy(outGeom.Vertices.data(), positionsData.data() + positionsView.byteOffset, positionsView.byteLength);
+            outGeom.Vertices.resize(positionsAccessor.count);
 
             auto components = GetComponentsFromTinyGLTFType(positionsAccessor.type);
             auto size = GetSizeFromType(positionsAccessor.componentType);
+
+            // size == 4, float is 4 bytes, components == 3, vec3 is 3 components
+            if(size == 4 && components == 3)
+            {
+                auto* data = reinterpret_cast<glm::vec3*>(positionsData.data() + positionsView.byteOffset);
+                for (int i = 0; i < positionsAccessor.count; i++)
+                {
+                    outGeom.Vertices[i].Position = data[i];
+                }
+            }
+            else if(size == 8 && components == 3)
+            {
+                auto* data = reinterpret_cast<glm::dvec3*>(positionsData.data() + positionsView.byteOffset);
+                for (int i = 0; i < positionsAccessor.count; i++)
+                {
+                    outGeom.Vertices[i].Position = glm::vec3(data[i]);
+                }
+            }
+            else
+                throw std::runtime_error("Unsupported position type");
             outGeom.VertexSize = components * size;
-            outGeom.VertexFormat = ConvertToVkFormat(components, positionsAccessor.componentType);
         }
         // get material
         auto material = primitive.material;

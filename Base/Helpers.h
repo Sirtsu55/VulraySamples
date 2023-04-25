@@ -1,5 +1,9 @@
+#pragma once
+
 #include "MeshLoader.h"
 #include "Vulray/Vulray.h"
+#include "GPUMaterial.h"
+
 
 void CalculateBufferSizes(const Scene& scene,
     uint32_t& outVertexBufferSize,
@@ -14,9 +18,8 @@ void CalculateBufferSizes(const Scene& scene,
     {
         for (auto& geomRef : mesh.GeometryReferences)
         {
-            outVertexBufferSize += geometries[geomRef].Vertices.size();
-            outIndexBufferSize += sizeof(uint32_t);
-            outIndexBufferSize += geometries[geomRef].Indices.size();
+            outVertexBufferSize += geometries[geomRef].Vertices.size() * sizeof(Vertex);
+            outIndexBufferSize += geometries[geomRef].Indices.size() * sizeof(uint32_t);
             outMaterialBufferSize += sizeof(GPUMaterial);
         }
         outTransformBufferSize += sizeof(vk::TransformMatrixKHR);
@@ -25,10 +28,10 @@ void CalculateBufferSizes(const Scene& scene,
 
 void CopySceneToBuffers(
     const Scene& scene,
-    char* vertexBuffer, 
-    char* indexBuffer,
-    char* transformBuffer,
-    char* materialBuffer,
+    Vertex* vertData, 
+    uint32_t* idxData,
+    char* transData,
+    char* matData,
     vk::DeviceAddress vertexBufferDevAddress,
     vk::DeviceAddress indexBufferDevAddress,
     vk::DeviceAddress transformBufferDevAddress,
@@ -39,28 +42,29 @@ void CopySceneToBuffers(
     auto& geometries = scene.Geometries;
 
     // copy the scene data to the buffers
-    uint32_t vertexOffset = 0;
-    uint32_t indexOffset = 0;
-    uint32_t transformOffset = 0;
-    uint32_t materialOffset = 0;
+    uint32_t vertOffset = 0;
+    uint32_t idxOffset = 0;
+    uint32_t transOffset = 0;
+    uint32_t matOffset = 0;
+
     for (auto& mesh : scene.Meshes)
     {
         auto& blasinfo = outBlasCreateInfos.emplace_back(vr::BLASCreateInfo{});
         blasinfo.Flags = flags;
-        
-        outInsanceIDs.push_back(materialOffset / sizeof(GPUMaterial));
+
+        outInsanceIDs.push_back(matOffset / sizeof(GPUMaterial));
 
         for (auto& geomRef : mesh.GeometryReferences)
         {
 			auto& geom = geometries[geomRef];
 			vr::GeometryData geomData = {};
-			geomData.VertexFormat = geom.VertexFormat;
-			geomData.Stride = geom.VertexSize;
-			geomData.IndexFormat = geom.IndexFormat;
-			geomData.PrimitiveCount = geom.Indices.size() / geom.IndexSize / 3;
-			geomData.DataAddresses.VertexDevAddress = vertexBufferDevAddress + vertexOffset;
-			geomData.DataAddresses.IndexDevAddress = indexBufferDevAddress + indexOffset;
-			geomData.DataAddresses.TransformBuffer = transformBufferDevAddress + transformOffset;
+			geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
+			geomData.Stride = sizeof(Vertex);
+			geomData.IndexFormat = vk::IndexType::eUint32;
+			geomData.PrimitiveCount = geom.Indices.size() / 3;
+			geomData.DataAddresses.VertexDevAddress = vertexBufferDevAddress + vertOffset * sizeof(Vertex);
+			geomData.DataAddresses.IndexDevAddress = indexBufferDevAddress + idxOffset * sizeof(uint32_t);
+			geomData.DataAddresses.TransformBuffer = transformBufferDevAddress + transOffset;
 			blasinfo.Geometries.push_back(geomData);
 			
             GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
@@ -68,18 +72,20 @@ void CopySceneToBuffers(
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
             mat.Type = MaterialType::Emissive;
+            mat.VertBufferOffset = vertOffset;
+            mat.IndexBufferOffset = idxOffset;
 
-			memcpy(vertexBuffer + vertexOffset, geom.Vertices.data(), geom.Vertices.size());
-			memcpy(indexBuffer + indexOffset, geom.Indices.data(), geom.Indices.size());
-            memcpy(materialBuffer + materialOffset, &mat, sizeof(GPUMaterial));
+			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size() * sizeof(Vertex));
+			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size() * sizeof(uint32_t));
+            memcpy(matData + matOffset, &mat, sizeof(GPUMaterial));
 
-			vertexOffset += geom.Vertices.size(); // the size is in bytes
-			indexOffset += geom.Indices.size();
-            materialOffset += sizeof(GPUMaterial); // material for each geometry
+			vertOffset += geom.Vertices.size();
+			idxOffset += geom.Indices.size();
+            matOffset += sizeof(GPUMaterial); // material for each geometry
 		}
 
-        memcpy(transformBuffer + transformOffset, &mesh.Transform, sizeof(vk::TransformMatrixKHR));
-        transformOffset += sizeof(vk::TransformMatrixKHR);
+        memcpy(transData + transOffset, &mesh.Transform, sizeof(vk::TransformMatrixKHR));
+        transOffset += sizeof(vk::TransformMatrixKHR);
     }
 
 }

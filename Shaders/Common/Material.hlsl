@@ -1,9 +1,14 @@
 
 // This needs to match the index in c++ code
-enum MaterialType : unsigned int
+enum MaterialType : uint
 {
     Opaque = 0, // opaque material
     Emissive = 1 // emissive material
+};
+
+struct Vertex // has to match the layout alignment in c++ code
+{
+    float4 Position;
 };
 
 struct GPUMaterial // has to be aligned to 16 bytes
@@ -12,6 +17,9 @@ struct GPUMaterial // has to be aligned to 16 bytes
     float Metallic;
     float3 Emissive;
     float Roughness;
-    unsigned int Type;
-    float3 Padding;
+    uint Type;
+    uint VertBufferStart;
+    uint IndexBufferStart;
+
+    float Padding;
 };
