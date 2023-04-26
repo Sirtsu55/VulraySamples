@@ -1,6 +1,8 @@
 #include "Shaders/Common/Camera.hlsl"
 #include "Shaders/Common/Material.hlsl"
 
+#define RECURSION_DEPTH 16
+
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
 [[vk::binding(1, 0)]] cbuffer cam { CameraProperties cam; };
@@ -13,6 +15,7 @@ struct Payload
 {
 [[vk::location(0)]] float3 hitValue;
 [[vk::location(1)]] float3 hitNormal;
+[[vk::location(2)]] float3 hitPoint;
 };
 
 [shader("raygeneration")]
@@ -33,9 +36,21 @@ void rgen()
 	rayDesc.TMax = 10000.0;
 
 	Payload payload;
-	TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, rayDesc, payload);
 
-	image[int2(LaunchID.xy)] = float4(payload.hitValue, 0.0);
+	float3 accum = float3(0.0, 0.0, 0.0);
+
+	for (int i = 0; i < RECURSION_DEPTH; i++)
+	{
+		TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, rayDesc, payload);
+		rayDesc.Origin = payload.hitPoint;
+		rayDesc.Direction = reflect(rayDesc.Direction, payload.hitNormal);
+		accum += payload.hitValue;
+		if(payload.hitPoint.x == 0.0 && payload.hitPoint.y == 0.0 && payload.hitPoint.z == 0.0)
+			break;
+	}
+	
+	float3 finalColor = saturate(accum / float(RECURSION_DEPTH));
+	image[int2(LaunchID.xy)] = float4(finalColor, 0.0);
 }
 
 float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint index)
@@ -63,8 +78,9 @@ void chit(inout Payload p, in float2 attribs)
 	float3 t1 = GetVertex(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 1);
 	float3 t2 = GetVertex(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 2);
 	float3 normal = normalize(cross(t1 - t0, t2 - t0));
-
-	p.hitValue = normal;
+	p.hitValue = mat.BaseColor;
+	p.hitNormal = normal;
+	p.hitPoint = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 }
 
 
@@ -72,5 +88,6 @@ void chit(inout Payload p, in float2 attribs)
 void miss(inout Payload p)
 {
     p.hitValue = float3(0.0, 0.0, 0.2);
+	p.hitPoint = float3(0.0, 0.0, 0.0);
 }
 
