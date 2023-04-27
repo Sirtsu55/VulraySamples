@@ -1,7 +1,8 @@
 #include "Shaders/Common/Camera.hlsl"
 #include "Shaders/Common/Material.hlsl"
+#include "Shaders/Common/Functions.hlsl"
 
-#define RECURSION_DEPTH 16
+#define PATH_SAMPLES 16
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -39,17 +40,26 @@ void rgen()
 
 	float3 accum = float3(0.0, 0.0, 0.0);
 
-	for (int i = 0; i < RECURSION_DEPTH; i++)
+	int samples = 0;
+	for (; samples < PATH_SAMPLES; samples++)
 	{
 		TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, rayDesc, payload);
 		rayDesc.Origin = payload.hitPoint;
-		rayDesc.Direction = reflect(rayDesc.Direction, payload.hitNormal);
+
+		float rand1 = Random(inUV.x);
+		float rand2 = Random(inUV.y);
+		float rand3 = Random(rayDesc.Origin.x);
+
+		float3 dir = payload.hitNormal;
+
+		rayDesc.Direction = normalize(dir + float3(rand1, rand2, rand3) * 0.6);
+
 		accum += payload.hitValue;
 		if(payload.hitPoint.x == 0.0 && payload.hitPoint.y == 0.0 && payload.hitPoint.z == 0.0)
 			break;
 	}
-	
-	float3 finalColor = saturate(accum / float(RECURSION_DEPTH));
+	samples = samples == 0 ? 1 : samples;
+	float3 finalColor = saturate(accum / float(samples));
 	image[int2(LaunchID.xy)] = float4(finalColor, 0.0);
 }
 

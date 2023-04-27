@@ -34,7 +34,6 @@ struct Geometry
     
     std::vector<Vertex> Vertices;
     std::vector<uint32_t> Indices;
-    uint32_t VertexSize = 0;
     
     glm::mat4 Transform = glm::mat4(1.0f);
 

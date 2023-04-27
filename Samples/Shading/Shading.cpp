@@ -135,6 +135,7 @@ void Shading::CreateAS()
         mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, mTransformBuffer.DevAddress,
         instanceIDs, blasCreateInfos, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
 
+
     mVRDev->UnmapBuffer(mVertexBuffer);
     mVRDev->UnmapBuffer(mIndexBuffer);
     mVRDev->UnmapBuffer(mTransformBuffer);

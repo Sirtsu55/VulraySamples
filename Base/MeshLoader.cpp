@@ -6,6 +6,9 @@
 
 #include "MeshLoader.h"
 
+// Simply Load a gltf file
+
+
 Scene MeshLoader::LoadGLBMesh(const std::string& path)
 {
     Scene outScene = {};
@@ -143,7 +146,6 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, tinygltf::Model& mod
             }
             else
                 throw std::runtime_error("Unsupported position type");
-            outGeom.VertexSize = components * size;
         }
         // get material
         auto material = primitive.material;

@@ -71,7 +71,6 @@ void CopySceneToBuffers(
             mat.BaseColor = geom.Material.BaseColorFactor;
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
-            mat.Type = MaterialType::Emissive;
             mat.VertBufferOffset = vertOffset;
             mat.IndexBufferOffset = idxOffset;
 

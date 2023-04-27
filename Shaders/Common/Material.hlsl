@@ -17,9 +17,8 @@ struct GPUMaterial // has to be aligned to 16 bytes
     float Metallic;
     float3 Emissive;
     float Roughness;
-    uint Type;
     uint VertBufferStart;
     uint IndexBufferStart;
 
-    float Padding;
+    float2 Padding;
 };
