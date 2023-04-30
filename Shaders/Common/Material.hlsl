@@ -9,6 +9,7 @@ enum MaterialType : uint
 struct Vertex // has to match the layout alignment in c++ code
 {
     float4 Position;
+    float4 Normal;
 };
 
 struct GPUMaterial // has to be aligned to 16 bytes

@@ -12,6 +12,8 @@ struct Vertex
 {
     glm::vec3 Position;
     float padding; // this is to assure layout requirements when accessing from SSBO in shaders
+    glm::vec3 Normal;
+    float padding2;
 };
 
 struct GPUMaterial // has to be aligned to 16 bytes

@@ -147,15 +147,49 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, tinygltf::Model& mod
             else
                 throw std::runtime_error("Unsupported position type");
         }
+        // Get normals
+        auto normals = primitive.attributes.find("NORMAL");
+        if (normals != primitive.attributes.end())
+        {
+            auto& normalsAccessor = model.accessors[normals->second];
+            auto& normalsView = model.bufferViews[normalsAccessor.bufferView];
+            auto& normalsBuffer = model.buffers[normalsView.buffer];
+            auto& normalsData = normalsBuffer.data;
+            outGeom.Vertices.resize(normalsAccessor.count);
+
+            auto components = GetComponentsFromTinyGLTFType(normalsAccessor.type);
+            auto size = GetSizeFromType(normalsAccessor.componentType);
+
+            // size == 4, float is 4 bytes, components == 3, vec3 is 3 components
+            if(size == 4 && components == 3)
+            {
+                auto* data = reinterpret_cast<glm::vec3*>(normalsData.data() + normalsView.byteOffset);
+                for (int i = 0; i < normalsAccessor.count; i++)
+                {
+                    outGeom.Vertices[i].Normal = data[i];
+                }
+            }
+            else if(size == 8 && components == 3)
+            {
+                auto* data = reinterpret_cast<glm::dvec3*>(normalsData.data() + normalsView.byteOffset);
+                for (int i = 0; i < normalsAccessor.count; i++)
+                {
+                    outGeom.Vertices[i].Normal = glm::vec3(data[i]);
+                }
+            }
+            else
+                throw std::runtime_error("Unsupported normal type");
+        }
+
         // get material
         auto material = primitive.material;
         if(material != -1)
         {
             auto& mat = model.materials[material];
             auto& pbr = mat.pbrMetallicRoughness;
-
+            
             if(mat.emissiveFactor.size() == 3)
-                outGeom.Material.EmissiveFactor = glm::make_vec4(pbr.baseColorFactor.data());
+                outGeom.Material.EmissiveFactor = glm::make_vec4(mat.emissiveFactor.data());
 
             if(pbr.baseColorFactor.size() == 4)
                 outGeom.Material.BaseColorFactor = glm::make_vec4(pbr.baseColorFactor.data());

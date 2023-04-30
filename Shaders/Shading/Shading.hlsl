@@ -2,7 +2,9 @@
 #include "Shaders/Common/Material.hlsl"
 #include "Shaders/Common/Functions.hlsl"
 
-#define PATH_SAMPLES 16
+#define PATH_SAMPLES 4
+#define RECURSION_LENGTH 8
+
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -14,9 +16,9 @@
 
 struct Payload
 {
-[[vk::location(0)]] float3 hitValue;
-[[vk::location(1)]] float3 hitNormal;
-[[vk::location(2)]] float3 hitPoint;
+[[vk::location(0)]] float4 hitValue; // XYZ is color, W is not used
+[[vk::location(1)]] float3 newRayDirection;
+[[vk::location(2)]] float4 hitPoint; // XYZ, W is -1.0 if no hit and 1.0 if hit
 };
 
 [shader("raygeneration")]
@@ -37,29 +39,33 @@ void rgen()
 	rayDesc.TMax = 10000.0;
 
 	Payload payload;
+	payload.hitValue = float4(0.0, 0.0, 0.0, 1.0);
 
-	float3 accum = float3(0.0, 0.0, 0.0);
+	float3 AccumulatedColor = float3(0.0, 0.0, 0.0);
 
-	int samples = 0;
-	for (; samples < PATH_SAMPLES; samples++)
+	int RecursionDepth = 0;
+
+	while (RecursionDepth < RECURSION_LENGTH)
 	{
-		TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, rayDesc, payload);
-		rayDesc.Origin = payload.hitPoint;
+		RecursionDepth++;
 
-		float rand1 = Random(inUV.x);
-		float rand2 = Random(inUV.y);
-		float rand3 = Random(rayDesc.Origin.x);
+		TraceRay(rs, RAY_FLAG_NONE, 0xFF, 0, 0, 0, rayDesc, payload);
 
-		float3 dir = payload.hitNormal;
+		rayDesc.Direction = payload.newRayDirection;
+		rayDesc.Origin = payload.hitPoint.xyz;
 
-		rayDesc.Direction = normalize(dir + float3(rand1, rand2, rand3) * 0.6);
-
-		accum += payload.hitValue;
-		if(payload.hitPoint.x == 0.0 && payload.hitPoint.y == 0.0 && payload.hitPoint.z == 0.0)
+		if (payload.hitPoint.w < 0.0)
+		{
+			AccumulatedColor += payload.hitValue.xyz;
 			break;
+		}
+		AccumulatedColor += payload.hitValue.xyz;
 	}
-	samples = samples == 0 ? 1 : samples;
-	float3 finalColor = saturate(accum / float(samples));
+
+	
+
+	float3 finalColor = AccumulatedColor / float(RecursionDepth);
+
 	image[int2(LaunchID.xy)] = float4(finalColor, 0.0);
 }
 
@@ -68,36 +74,40 @@ float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint inde
     uint idx = IndexBuffer[indexBufferStart + index];
 	return VertexBuffer[vertBufferStart + idx].Position.xyz;
 }
-
-
+float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint index)
+{
+	uint idx = IndexBuffer[indexBufferStart + index];
+	return VertexBuffer[vertBufferStart + idx].Normal.xyz;
+}
 
 [shader("closesthit")]
 void chit(inout Payload p, in float2 attribs)
 {
-	// Get the material index from the geometry index
-	// IndexID() is the index that we set when creating the TLAS instance
-	// GeometryIndex() is the index of the geometry in the BLAS
-	// For the Materials Sample the V-shaped geometry is the first geometry in the BLAS
-	// and InstanceID() was set to 0, so the material index is 0 + 0 = 0
-
 	uint matIndex = InstanceID() + GeometryIndex();
 
 	GPUMaterial mat = materials[matIndex];
 
-	float3 t0 = GetVertex(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 0);
-	float3 t1 = GetVertex(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 1);
-	float3 t2 = GetVertex(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 2);
-	float3 normal = normalize(cross(t1 - t0, t2 - t0));
-	p.hitValue = mat.BaseColor;
-	p.hitNormal = normal;
-	p.hitPoint = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+	float3 normals[3] = {
+		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 0),
+		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 1),
+		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 2)
+	};
+
+	float3 normal = HitAttribute(normals, attribs);
+	
+
+	p.hitValue.xyz = mat.BaseColor;
+	p.hitPoint.w = 1.0;
+
+	p.newRayDirection = reflect(WorldRayDirection(), normal);
+	p.hitPoint.xyz = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 }
 
 
 [shader("miss")]
 void miss(inout Payload p)
 {
-    p.hitValue = float3(0.0, 0.0, 0.2);
-	p.hitPoint = float3(0.0, 0.0, 0.0);
+    p.hitValue.xyz = float3(0.0, 0.0, 0.2);
+	p.hitPoint = float4(0.0, 0.0, 0.0, -1.0);
 }
 

@@ -174,7 +174,7 @@ void Shading::CreateAS()
         auto inst = vk::AccelerationStructureInstanceKHR()
             .setInstanceCustomIndex(instanceIDs[i]) // set the instance ID 
             .setAccelerationStructureReference(mBLASHandles[i].BLASBuffer.DevAddress)
-            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
+            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFlipFacing)
             .setMask(0xFF)
             .setInstanceShaderBindingTableRecordOffset(0);
 

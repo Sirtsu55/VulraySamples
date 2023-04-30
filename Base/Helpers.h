@@ -69,6 +69,7 @@ void CopySceneToBuffers(
 			
             GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
             mat.BaseColor = geom.Material.BaseColorFactor;
+            mat.Emissive = geom.Material.EmissiveFactor;
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
             mat.VertBufferOffset = vertOffset;
