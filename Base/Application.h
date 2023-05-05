@@ -28,6 +28,10 @@ public:
 
 	void UpdateCamera();
 
+private:
+	void HandleResize();
+
+
 protected:
 
 	GLFWwindow* mWindow = nullptr;
@@ -37,12 +41,16 @@ protected:
 	vk::PhysicalDevice mPhysicalDevice = nullptr;
 	vr::CommandQueues mQueues;
 
+
 	vk::CommandPool mGraphicsPool;
 
 	vr::AllocatedImage mOutputImageBuffer;
     vr::AccessibleImage mOutputImage;
 
+	vr::SwapchainBuilder mSwapchainBuilder;
 	vr::SwapchainStructs mSwapchainStructs;
+	vk::SwapchainKHR mOldSwapchain = nullptr;
+	
 	uint32_t mMaxFramesInFlight = 0;
 
 	uint32_t mWidth = 1280;

@@ -68,13 +68,13 @@ Application::Application()
 
     // This code creates a swapchain with a particular format and dimensions.
 
-    auto SwapchainBuilder = vr::SwapchainBuilder(mDevice, mPhysicalDevice, mSurface, mQueues.GraphicsIndex, mQueues.PresentIndex);
-    SwapchainBuilder.Height = mWidth;
-    SwapchainBuilder.Width = mHeight;
-	SwapchainBuilder.BackBufferCount = 2;
-    SwapchainBuilder.ImageUsage = vk::ImageUsageFlagBits::eTransferDst;
-	SwapchainBuilder.DesiredFormat = vk::Format::eB8G8R8A8Unorm; 
-    mSwapchainStructs = SwapchainBuilder.BuildSwapchain();
+    mSwapchainBuilder = vr::SwapchainBuilder(mDevice, mPhysicalDevice, mSurface, mQueues.GraphicsIndex, mQueues.PresentIndex);
+    mSwapchainBuilder.Height = mWidth;
+    mSwapchainBuilder.Width = mHeight;
+	mSwapchainBuilder.BackBufferCount = 2;
+    mSwapchainBuilder.ImageUsage = vk::ImageUsageFlagBits::eTransferDst;
+	mSwapchainBuilder.DesiredFormat = vk::Format::eB8G8R8A8Unorm; 
+    mSwapchainStructs = mSwapchainBuilder.BuildSwapchain();
     
     //Create command pools
 	vk::CommandPoolCreateInfo poolInfo = {};
@@ -128,20 +128,13 @@ void Application::BeginFrame()
     DeltaTime = mFrameTimer.Endd();
     mFrameTimer.Start();
     //Acquire the next image
-    auto result = mDevice.acquireNextImageKHR(mSwapchainStructs.SwapchainHandle, UINT64_MAX, mRenderSemaphore, nullptr);
+    auto result = mDevice.acquireNextImageKHR(mSwapchainStructs.SwapchainHandle, UINT64_MAX, mRenderSemaphore, nullptr, &mCurrentSwapchainImage);
 
-    if(result.result == vk::Result::eErrorOutOfDateKHR)
+    if(mOldSwapchain)
     {
-        VULRAY_LOG_ERROR("Swapchain out of date");
-        return;
+        mDevice.destroySwapchainKHR(mOldSwapchain);
+        mOldSwapchain = nullptr;
     }
-    else if(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR)
-    {
-        throw std::runtime_error("Failed to acquire swapchain image");
-    }
-
-    mCurrentSwapchainImage = result.value;
-
 
 }
 
@@ -182,9 +175,22 @@ void Application::Present(vk::CommandBuffer commandBuffer)
         .setPSwapchains(&mSwapchainStructs.SwapchainHandle)
         .setPImageIndices(&mCurrentSwapchainImage);
     
-    auto result = mQueues.GraphicsQueue.presentKHR(presentInfo);
+    // Pass a pointer, not a reference, because Vulkan-hpp EnhancedMode is on, which throws an error if result is not vk::Result::eSuccess
+    // the results can be vk::Result::eSuccess, vk::Result::eSuboptimalKHR or vk::Result::eErrorOutOfDateKHR
+    auto result = mQueues.PresentQueue.presentKHR(&presentInfo);
     
-
+    if(result == vk::Result::eErrorOutOfDateKHR)
+    {
+        HandleResize();
+    }
+    else if(result == vk::Result::eSuboptimalKHR)
+    {
+        VULRAY_LOG_ERROR("Swapchain is suboptimal");
+    }
+    else if (result != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Unknown result when presenting swapchain: " + vk::to_string(result));
+    }
     //new image index
     mRTRenderCmdIndex = mRTRenderCmdIndex == 0 ? 1 : 0;
 
@@ -275,6 +281,26 @@ void Application::UpdateCamera()
     glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
     auto size = sizeof(glm::mat4) * 2;
     mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size);     
+}
+
+void Application::HandleResize()
+{
+    // save the old swapchain, because we need to destroy it later after all operations on it are finished
+    mOldSwapchain = mSwapchainStructs.SwapchainHandle;
+    // Destroy the old swapchain resources, but not the swapchain itself
+    vr::SwapchainBuilder::DestroySwapchainResources(mDevice, mSwapchainStructs);
+
+    mSwapchainStructs = mSwapchainBuilder.BuildSwapchain(mOldSwapchain);
+
+    // get the new framebuffer size
+    int width, height;
+    glfwGetFramebufferSize(mWindow, &width, &height);
+    mWidth = width;
+    mHeight = height;
+
+    // update the camera aspect ratio
+    mCamera.AspectRatio = (float)mSwapchainStructs.SwapchainExtent.width / (float)mSwapchainStructs.SwapchainExtent.height;
+    
 }
 
 void Application::Run()
