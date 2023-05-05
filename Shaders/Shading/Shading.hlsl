@@ -3,7 +3,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 8
+#define RECURSION_LENGTH 1
 
 
 // vk::binding(binding, set)
@@ -44,6 +44,7 @@ void rgen()
 	float3 AccumulatedColor = float3(0.0, 0.0, 0.0);
 
 	int RecursionDepth = 0;
+	float attenuation = 1.0;
 
 	while (RecursionDepth < RECURSION_LENGTH)
 	{
@@ -59,7 +60,13 @@ void rgen()
 			AccumulatedColor += payload.hitValue.xyz;
 			break;
 		}
-		AccumulatedColor += payload.hitValue.xyz;
+
+		// atennuate color 
+		AccumulatedColor += payload.hitValue.xyz * attenuation;
+		// AccumulatedColor += float3(1,1,1) * attenuation;
+
+		// update attenuation
+		attenuation *= payload.hitValue.w;
 	}
 
 	
@@ -81,7 +88,7 @@ float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint inde
 }
 
 [shader("closesthit")]
-void chit(inout Payload p, in float2 attribs)
+void chit(inout Payload p, in float2 barycentrics)
 {
 	uint matIndex = InstanceID() + GeometryIndex();
 
@@ -93,13 +100,17 @@ void chit(inout Payload p, in float2 attribs)
 		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 2)
 	};
 
-	float3 normal = HitAttribute(normals, attribs);
+	float3 normal = InterpolateTriangle(normals, barycentrics);
 	
+	float VdotN = dot(normal, WorldRayDirection());
+
 
 	p.hitValue.xyz = mat.BaseColor;
+	p.hitValue.w = SchlickApproximation(0.0, VdotN); // next ray will be attenuated by this amount
+
 	p.hitPoint.w = 1.0;
 
-	p.newRayDirection = reflect(WorldRayDirection(), normal);
+	p.newRayDirection = normalize(reflect(WorldRayDirection(), normal));
 	p.hitPoint.xyz = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 }
 

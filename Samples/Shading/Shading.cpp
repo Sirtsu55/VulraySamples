@@ -67,7 +67,7 @@ void Shading::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/spheres.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
@@ -320,7 +320,7 @@ void Shading::Update(vk::CommandBuffer renderCmd)
         mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) },
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mOutputImageBuffer.Width, mOutputImageBuffer.Height, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
         vk::Filter::eNearest);
