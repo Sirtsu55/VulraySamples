@@ -164,7 +164,6 @@ void MeshMaterials::CreateAS()
             mat.BaseColor = geom.Material.BaseColorFactor;
             mat.Roughness = geom.Material.RoughnessFactor;
             mat.Metallic = geom.Material.MetallicFactor;
-            mat.Type = MaterialType::Emissive;
             mat.VertBufferOffset = vertOffset;
             mat.IndexBufferOffset = idxOffset;
 
@@ -364,7 +363,7 @@ void MeshMaterials::Update(vk::CommandBuffer renderCmd)
         mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) },
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mOutputImageBuffer.Width, mOutputImageBuffer.Height, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
         vk::Filter::eNearest);

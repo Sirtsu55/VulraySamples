@@ -299,7 +299,7 @@ void Application::HandleResize()
     mHeight = height;
 
     // update the camera aspect ratio
-    mCamera.AspectRatio = (float)mSwapchainStructs.SwapchainExtent.width / (float)mSwapchainStructs.SwapchainExtent.height;
+    mCamera.AspectRatio = (float)mOutputImageBuffer.Width / (float)mOutputImageBuffer.Height;
     
 }
 
