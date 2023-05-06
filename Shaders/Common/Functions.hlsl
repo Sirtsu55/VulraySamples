@@ -49,18 +49,21 @@ float3 SampleDirectionGGX(float3 v, float3 n, float roughness, float u1, float u
 //----------------------------------------------------------------------
 
 
-// Computes the Fresnel term for a dielectric material using Schlick's approximation
-// Specular Color is the color of the specular reflection
-float3 SchlickApproximation(float3 specularColor, float angle)
-{
-    float dotNV = abs(angle);
-    return specularColor + (1.0f - specularColor) * pow(1.0f - dotNV, 5.0f);
-}
+
+
 
 // Computes the Fresnel term for a dielectric material using Schlick's approximation
 // Specular is the specular intensity
 float SchlickApproximation(float specular, float angle)
 {
-    float dotNV = abs(angle); 
+    // Take the absolute value of the dot product to avoid negative values which can occur
+    // if dotting a normal and view vector behind the surface
+    float dotNV = abs(angle);
     return specular + (1.0f - specular) * pow(1.0f - dotNV, 5.0f);
+}
+
+float3 SchlickApproximation(float3 specularColor, float angle)
+{
+    float dotNV = abs(angle);
+    return specularColor + (1.0f - specularColor) * pow(1.0f - dotNV, 5.0f);
 }

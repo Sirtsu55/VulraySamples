@@ -1,10 +1,12 @@
 
-// includes are relative to the executable directory
-#include "Shaders/Common/Camera.hlsl"
-
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
-[[vk::binding(1, 0)]] cbuffer cam { CameraProperties cam; };
+[[vk::binding(1, 0)]] cbuffer uniformBuffer 
+{ 
+	float4x4 viewInverse;
+	float4x4 projInverse;
+	float4 time; // time is in x
+};
 [[vk::binding(2, 0)]] RWTexture2D<float4> image;
 
 

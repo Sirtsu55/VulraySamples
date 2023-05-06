@@ -185,7 +185,7 @@ void Application::Present(vk::CommandBuffer commandBuffer)
     }
     else if(result == vk::Result::eSuboptimalKHR)
     {
-        VULRAY_LOG_ERROR("Swapchain is suboptimal");
+        HandleResize();
     }
     else if (result != vk::Result::eSuccess)
     {
@@ -224,8 +224,11 @@ void Application::CreateBaseResources()
     mOutputImage.View = mDevice.createImageView(viewCreateInfo);
 
     // create a uniform buffer
-    mCameraUniformBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 4 * 4 * 2, // two 4x4 matrix
+    uint32_t uniformBufferSize =  sizeof(float) * 4 * 4 * 2; // two 4x4 matrix
+    uniformBufferSize += sizeof(float) * 4; // pass time, and 3 floats for padding or whatever else in the future
+
+    mUniformBuffer = mVRDev->CreateBuffer(
+        uniformBufferSize,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // we will be writing to this buffer on the CPU
         vk::BufferUsageFlagBits::eUniformBuffer); // its a uniform buffer
 }
@@ -279,8 +282,14 @@ void Application::UpdateCamera()
 
     //update the view matrix
     glm::mat4 mats[2] = { glm::inverse(view), glm::inverse(proj) };
-    auto size = sizeof(glm::mat4) * 2;
-    mVRDev->UpdateBuffer(mCameraUniformBuffer, mats, size);     
+
+    float time = glfwGetTime();
+
+    char* mapped = (char*)mVRDev->MapBuffer(mUniformBuffer);
+    memcpy(mapped, mats, sizeof(glm::mat4) * 2);
+    memcpy(mapped + sizeof(glm::mat4) * 2, &time, sizeof(float));
+    mVRDev->UnmapBuffer(mUniformBuffer);
+
 }
 
 void Application::HandleResize()
@@ -315,8 +324,8 @@ void Application::Run()
 
 Application::~Application()
 {
-    if(mCameraUniformBuffer.Buffer)
-        mVRDev->DestroyBuffer(mCameraUniformBuffer);
+    if(mUniformBuffer.Buffer)
+        mVRDev->DestroyBuffer(mUniformBuffer);
     if(mOutputImageBuffer.Image)
         mVRDev->DestroyImage(mOutputImageBuffer);
 
