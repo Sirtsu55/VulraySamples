@@ -68,7 +68,7 @@ protected:
     uint32_t mRTRenderCmdIndex = 0;
 
 
-	vr::AllocatedBuffer mCameraUniformBuffer = {};
+	vr::AllocatedBuffer mUniformBuffer = {};
 
 	Camera mCamera;
 
