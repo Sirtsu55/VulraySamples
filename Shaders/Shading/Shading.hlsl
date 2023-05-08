@@ -2,17 +2,19 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 2
+#define RECURSION_LENGTH 4
 
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
+
 [[vk::binding(1, 0)]] cbuffer uniformBuffer 
 { 
 	float4x4 viewInverse;
 	float4x4 projInverse;
-	float4 time; // time is in x
+	float4 time; // time is in x, other values are unused / padding
 };
+
 [[vk::binding(2, 0)]] RWTexture2D<float4> image;
 [[vk::binding(3, 0)]] RWStructuredBuffer<GPUMaterial> materials;
 [[vk::binding(4, 0)]] StructuredBuffer<Vertex> VertexBuffer;
@@ -66,18 +68,17 @@ void rgen()
 			AccumulatedColor += payload.hitValue.xyz;
 			break;
 		}
-		if (payload.hitValue.w < 0.01) // terminate ray if it's too dark
-			break; 
 
 		// atennuate color 
 		AccumulatedColor += payload.hitValue.xyz * attenuation;
-		// AccumulatedColor += float3(1,1,1) * attenuation;
-
+		
 		// update attenuation
 		attenuation *= payload.hitValue.w;
 	}
 	
 	float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
+
+
 
 	image[int2(LaunchID.xy)] = float4(finalColor, 1.0);
 	// image[int2(LaunchID.xy)] = time;
@@ -92,20 +93,6 @@ float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint inde
 {
 	uint idx = IndexBuffer[indexBufferStart + index];
 	return VertexBuffer[vertBufferStart + idx].Normal.xyz;
-}
-
-float3 SampleDirectionHemisphere(float3 v, float u1, float u2)
-{
-    float theta = atan2(0.5 * sqrt(u1), sqrt(1 - u1));
-    float phi = 2 * PI * u2;
-
-    float3 h;
-    h.x = sin(theta) * cos(phi);
-    h.y = sin(theta) * sin(phi);
-    h.z = cos(theta);
-
-    float3 sampleDir = 2.0f * dot(h, v) * h - v;
-    return normalize(sampleDir);
 }
 
 [shader("closesthit")]
@@ -125,9 +112,10 @@ void chit(inout Payload p, in float2 barycentrics)
 	
 	float VdotN = dot(normal, WorldRayDirection());
 
-	if(mat.Emissive.x > 0.0 || mat.Emissive.y > 0.0 || mat.Emissive.z > 0.0)
+	if((mat.Emissive.x > 0.0 || mat.Emissive.y > 0.0 || mat.Emissive.z > 0.0))
 	{
-		p.lightContribution = p.hitValue.xyz;
+		p.lightContribution = mat.Emissive;
+		p.hitValue.xyz = mat.Emissive;
 		p.hitPoint.w = -1.0; // terminate ray
 	}
 	else
@@ -135,17 +123,44 @@ void chit(inout Payload p, in float2 barycentrics)
 		p.lightContribution = float3(0.0, 0.0, 0.0);
 		p.hitPoint.w = 1.0;
 	}
-	p.hitValue.xyz = mat.BaseColor;
-	p.hitValue.w = SchlickApproximation(1.0, VdotN); // next ray will be attenuated by this amount
 
-	uint rngState = asint(time.x);
 
-	float r1 = NextFloat(rngState);
-	float r2 = NextFloat(rngState);
+	float specular = saturate(mat.Metallic + 0.01); // Gltf has no specular, so we use metallic instead and assume specular = metallic we add epsilon to avoid 0
+	float roughness = mat.Roughness;
+
+
+	p.hitValue.w = SchlickApproximation(specular, abs(VdotN)); // next ray will be attenuated by this amount
+
+	float rayContrib = 1.0 - p.hitValue.w; // how much light is reflected by the surface
+
+	uint rngState = time.x; //* asint(WorldRayDirection().x) * asint(WorldRayDirection().y) * asint(WorldRayDirection().z);
+	rngState *= asint(WorldRayDirection().x);
+	
+	float u1 = NextRandomFloat(rngState);
+	float u2 = NextRandomFloat(rngState);
+
+    float theta = atan2(roughness * sqrt(u1), sqrt(1 - u1));
+    float phi = 2 * PI * u2;
+	
+	float3 v = WorldRayDirection();
+
+    float3 h;
+    h.x = sin(theta) * cos(phi);
+    h.y = sin(theta) * sin(phi);
+    h.z = cos(theta);
+
+    float3 sampleDir = 2.0f * dot(h, v) * h - v;
 
 	
-	// p.newRayDirection = normalize(reflect(WorldRayDirection(), normal));
+
+	p.newRayDirection = RotateOrthonormal(normal, sampleDir);
+
+	if(dot(p.newRayDirection, normal) > 0.0)
+		p.newRayDirection = -p.newRayDirection;
+
 	p.hitPoint.xyz = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+	p.hitValue.xyz = mat.BaseColor * rayContrib;
+
 }
 
 
@@ -154,6 +169,7 @@ void miss(inout Payload p)
 {
     p.hitValue.xyz = float3(0.1, 0.7, 1.0);
 	p.hitPoint = float4(0.0, 0.0, 0.0, -1.0);
-	p.lightContribution = float3(1.0, 1.0, 1.0);
+	p.lightContribution = float3(0.2, 0.2, 0.2);
+	p.newRayDirection = float3(0.0, 0.0, 0.0);
 }
 

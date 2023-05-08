@@ -1,27 +1,32 @@
 
 #define PI 3.1415926535897932384626433832795
+#define TWO_PI 6.283185307179586476925286766559
 #define EULER_E 2.7182818284590452353602874713527
 
 
-// Code from https://www.shadertoy.com/view/tsf3Dn
+// Xorshift random number generator
 //----------------------------------------------------------------------
-int Random(int value) {
-    value ^= value << 13;
-    value ^= value >> 17;
-    value ^= value << 5;
-    return value;
+uint Random(uint state)
+{
+    state ^= state << 13;
+    state ^= state >> 7;
+    state ^= state << 17;
+    return state;
 }
 
-int NextInt(inout int seed) {
+uint NextRandomInt(inout uint seed)
+{
     seed = Random(seed);
     return seed;
 }
-
-float NextFloat(inout int seed) {
+float NextRandomFloat(inout uint seed)
+{
     seed = Random(seed);
-    return abs(frac(float(seed) / 3141.592653));
+    return seed / (float)0xffffffff;
 }
+
 //----------------------------------------------------------------------
+
 
 float3 InterpolateTriangle(float3 vertexAttribute[3], in float2 barycentrics)
 {
@@ -64,6 +69,31 @@ float SchlickApproximation(float specular, float angle)
 
 float3 SchlickApproximation(float3 specularColor, float angle)
 {
-    float dotNV = abs(angle);
-    return specularColor + (1.0f - specularColor) * pow(1.0f - dotNV, 5.0f);
+    return specularColor + (1.0f - specularColor) * pow(1.0f - angle, 5.0f);
 }
+
+// Code from https://www.shadertoy.com/view/tlVczh
+//----------------------------------------------------------------------
+void GetOrthonormalBasis(in float3 n, out float3 xp, out float3 yp)
+{
+    float k = 1.0/max(1.0 + n.z,0.00001);
+    // k = min(k, 99995.0);
+    float a =  n.y*k;
+
+    float b =  n.y*a;
+    float c = -n.x*a;
+    
+    xp = float3(n.z+b, c, -n.x);
+    yp = float3(c, 1.0-b, -n.y);
+
+}
+//----------------------------------------------------------------------
+
+float3 RotateOrthonormal(in float3 Normal, in float3 vectorToRotate)
+{
+    float3 tangent, binormal;
+    GetOrthonormalBasis(Normal, tangent, binormal);
+
+    return tangent * vectorToRotate.x + binormal * vectorToRotate.y + Normal * vectorToRotate.z;
+}
+
