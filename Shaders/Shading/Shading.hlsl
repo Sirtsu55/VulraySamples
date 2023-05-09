@@ -78,8 +78,6 @@ void rgen()
 	
 	float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
 
-
-
 	image[int2(LaunchID.xy)] = float4(finalColor, 1.0);
 	// image[int2(LaunchID.xy)] = time;
 }
@@ -109,8 +107,10 @@ void chit(inout Payload p, in float2 barycentrics)
 	};
 
 	float3 normal = InterpolateTriangle(normals, barycentrics);
-	
 	float VdotN = dot(normal, WorldRayDirection());
+	
+	// normal = faceforward(normal, WorldRayDirection(), normal);
+
 
 	if((mat.Emissive.x > 0.0 || mat.Emissive.y > 0.0 || mat.Emissive.z > 0.0))
 	{
@@ -133,30 +133,28 @@ void chit(inout Payload p, in float2 barycentrics)
 
 	float rayContrib = 1.0 - p.hitValue.w; // how much light is reflected by the surface
 
-	uint rngState = time.x; //* asint(WorldRayDirection().x) * asint(WorldRayDirection().y) * asint(WorldRayDirection().z);
-	rngState *= asint(WorldRayDirection().x);
+	uint rngState = asint(time.x) * asint(WorldRayDirection().x) * asint(WorldRayDirection().y) * asint(WorldRayDirection().z);
+	// rngState *= asint(WorldRayDirection().x);
 	
 	float u1 = NextRandomFloat(rngState);
 	float u2 = NextRandomFloat(rngState);
 
-    float theta = atan2(roughness * sqrt(u1), sqrt(1 - u1));
+    float z = u1 * 2.0f - 1.0f;
+    float r = sqrt(max(0.0f, 1.0f - z * z));
     float phi = 2 * PI * u2;
-	
-	float3 v = WorldRayDirection();
+    float x = r * cos(phi);
+    float y = r * sin(phi);
 
-    float3 h;
-    h.x = sin(theta) * cos(phi);
-    h.y = sin(theta) * sin(phi);
-    h.z = cos(theta);
+    float3 sampleDir = float3(x, z, y);
 
-    float3 sampleDir = 2.0f * dot(h, v) * h - v;
+    float3 tangent, binormal;
+    GetOrthonormalBasis(normal, tangent, binormal);
 
-	
+    float3 rayDir = (tangent * sampleDir.x + binormal * sampleDir.y + normal * sampleDir.z);
 
-	p.newRayDirection = RotateOrthonormal(normal, sampleDir);
+	p.newRayDirection = rayDir;
 
-	if(dot(p.newRayDirection, normal) > 0.0)
-		p.newRayDirection = -p.newRayDirection;
+
 
 	p.hitPoint.xyz = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 	p.hitValue.xyz = mat.BaseColor * rayContrib;

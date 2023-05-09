@@ -76,15 +76,10 @@ float3 SchlickApproximation(float3 specularColor, float angle)
 //----------------------------------------------------------------------
 void GetOrthonormalBasis(in float3 n, out float3 xp, out float3 yp)
 {
-    float k = 1.0/max(1.0 + n.z,0.00001);
-    // k = min(k, 99995.0);
-    float a =  n.y*k;
-
-    float b =  n.y*a;
-    float c = -n.x*a;
     
-    xp = float3(n.z+b, c, -n.x);
-    yp = float3(c, 1.0-b, -n.y);
+    float3 a = (abs(n.x) > 0.9) ? float3(0,1,0) : float3(1,0,0);
+    yp = normalize(cross(n, a));
+    xp = cross(n, yp);
 
 }
 //----------------------------------------------------------------------
@@ -94,6 +89,6 @@ float3 RotateOrthonormal(in float3 Normal, in float3 vectorToRotate)
     float3 tangent, binormal;
     GetOrthonormalBasis(Normal, tangent, binormal);
 
-    return tangent * vectorToRotate.x + binormal * vectorToRotate.y + Normal * vectorToRotate.z;
+    return (tangent * vectorToRotate.x + binormal * vectorToRotate.y + Normal * vectorToRotate.z);
 }
 
