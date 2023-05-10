@@ -2,7 +2,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 1
+#define RECURSION_LENGTH 2
 
 
 // vk::binding(binding, set)
@@ -75,11 +75,12 @@ void rgen()
 		// update attenuation
 		attenuation *= payload.hitValue.w;
 	}
+
 	
 	float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
-	finalColor = payload.newRayDirection;
+
+	finalColor = pow(finalColor.rgb, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
 	image[int2(LaunchID.xy)] = float4(finalColor, 1.0);
-	// image[int2(LaunchID.xy)] = time;
 }
 
 float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint index)
@@ -87,6 +88,7 @@ float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint inde
     uint idx = IndexBuffer[indexBufferStart + index];
 	return VertexBuffer[vertBufferStart + idx].Position.xyz;
 }
+
 float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint index)
 {
 	uint idx = IndexBuffer[indexBufferStart + index];
@@ -139,18 +141,7 @@ void chit(inout Payload p, in float2 barycentrics)
 	float u1 = NextRandomFloat(rngState);
 	float u2 = NextRandomFloat(rngState);
 
-    float z = u1 * 2.0f - 1.0f;
-    float r = sqrt(max(0.0f, 1.0f - z * z));
-    float phi = 2 * PI * u2;
-    float x = r * cos(phi);
-    float y = r * sin(phi);
-
-    float3 sampleDir = float3(x, z, y);
-
-    float3 tangent, binormal;
-    GetOrthonormalBasis(normal, tangent, binormal);
-
-    float3 rayDir = CalculateRandomDirectionInHemisphere(normal, u1, u2);
+    float3 rayDir = CalculateRandomDirectionInHemisphere(normal, roughness, u1, u2);
 
 	p.newRayDirection = rayDir;
 

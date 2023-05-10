@@ -74,11 +74,24 @@ float3 SchlickApproximation(float3 specularColor, float angle)
 
 // Code from https://github.com/rtx-on/rtx-explore, Directory = src/D3D12PathTracer/src/shaders/Raytracing.hlsl
 //----------------------------------------------------------------------
-float3 CalculateRandomDirectionInHemisphere(float3 normal, float u1, float u2) {
+float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, float u1, float u2) {
 
 	float up = sqrt(u1); // cos(theta)
 	float over = sqrt(1 - up * up); // sin(theta)
 	float around = u2 * TWO_PI;
+
+
+    // float theta = atan2(roughness * sqrt(u1), sqrt(1 - u1));
+    // float phi = TWO_PI * u2;
+
+    // float3 v = WorldRayDirection();
+
+    // float3 h;
+    // h.x = sin(theta) * cos(phi);
+    // h.y = sin(theta) * sin(phi);
+    // h.z = cos(theta);
+
+    // float3 sampleDir = 2.0f * dot(h, v) * h - v;
 
     float3 directionNotNormal = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 0, 1);
 
@@ -97,6 +110,10 @@ float3 CalculateRandomDirectionInHemisphere(float3 normal, float u1, float u2) {
 		normalize(cross(normal, directionNotNormal));
 	float3 perpendicularDirection2 =
 		normalize(cross(normal, perpendicularDirection1));
+
+    // return sampleDir.x * perpendicularDirection1
+    //     + sampleDir.y * perpendicularDirection2
+    //     + sampleDir.z * normal;
 
 	return up * normal
 		+ cos(around) * over * perpendicularDirection1
