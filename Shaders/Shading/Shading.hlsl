@@ -139,6 +139,17 @@ void chit(inout Payload p, in float2 barycentrics)
 	float u1 = NextRandomFloat(rngState);
 	float u2 = NextRandomFloat(rngState);
 
+    float z = u1 * 2.0f - 1.0f;
+    float r = sqrt(max(0.0f, 1.0f - z * z));
+    float phi = 2 * PI * u2;
+    float x = r * cos(phi);
+    float y = r * sin(phi);
+
+    float3 sampleDir = float3(x, z, y);
+
+    float3 tangent, binormal;
+    GetOrthonormalBasis(normal, tangent, binormal);
+
     float3 rayDir = CalculateRandomDirectionInHemisphere(normal, u1, u2);
 
 	p.newRayDirection = rayDir;
