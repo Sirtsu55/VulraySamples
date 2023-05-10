@@ -2,7 +2,7 @@
 #define PI 3.1415926535897932384626433832795
 #define TWO_PI 6.283185307179586476925286766559
 #define EULER_E 2.7182818284590452353602874713527
-
+#define SQRT_OF_ONE_THIRD 0.57735026919
 
 // Xorshift random number generator
 //----------------------------------------------------------------------
@@ -76,10 +76,15 @@ float3 SchlickApproximation(float3 specularColor, float angle)
 //----------------------------------------------------------------------
 void GetOrthonormalBasis(in float3 n, out float3 xp, out float3 yp)
 {
+    float k = 1.0/max(1.0 + n.z,0.00001);
+    // k = min(k, 99995.0);
+    float a =  n.y*k;
+
+    float b =  n.y*a;
+    float c = -n.x*a;
     
-    float3 a = (abs(n.x) > 0.9) ? float3(0,1,0) : float3(1,0,0);
-    yp = normalize(cross(n, a));
-    xp = cross(n, yp);
+    xp = float3(n.z+b, c, -n.x);
+    yp = float3(c, 1.0-b, -n.y);
 
 }
 //----------------------------------------------------------------------
@@ -89,6 +94,43 @@ float3 RotateOrthonormal(in float3 Normal, in float3 vectorToRotate)
     float3 tangent, binormal;
     GetOrthonormalBasis(Normal, tangent, binormal);
 
-    return (tangent * vectorToRotate.x + binormal * vectorToRotate.y + Normal * vectorToRotate.z);
+    return tangent * vectorToRotate.x + binormal * vectorToRotate.y + Normal * vectorToRotate.z;
 }
 
+
+
+float3 CalculateRandomDirectionInHemisphere(float3 normal, float u1, float u2) {
+
+	float up = sqrt(u1); // cos(theta)
+	float over = sqrt(1 - up * up); // sin(theta)
+	float around = u2 * TWO_PI;
+
+	// Find a direction that is not the normal based off of whether or not the
+	// normal's components are all equal to sqrt(1/3) or whether or not at
+	// least one component is less than sqrt(1/3). Learned this trick from
+	// Peter Kutz.
+
+	float3 directionNotNormal;
+
+    directionNotNormal = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 0, 1);
+
+	// if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
+	// 	directionNotNormal = float3(1, 0, 0);
+	// }
+	// else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
+	// 	directionNotNormal = float3(0, 1, 0);
+	// }
+	// else {
+	// 	directionNotNormal = float3(0, 0, 1);
+	// }
+
+	// Use not-normal direction to generate two perpendicular directions
+	float3 perpendicularDirection1 =
+		normalize(cross(normal, directionNotNormal));
+	float3 perpendicularDirection2 =
+		normalize(cross(normal, perpendicularDirection1));
+
+	return up * normal
+		+ cos(around) * over * perpendicularDirection1
+		+ sin(around) * over * perpendicularDirection2;
+}

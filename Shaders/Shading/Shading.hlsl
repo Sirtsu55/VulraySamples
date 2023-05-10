@@ -2,7 +2,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 4
+#define RECURSION_LENGTH 1
 
 
 // vk::binding(binding, set)
@@ -77,7 +77,7 @@ void rgen()
 	}
 	
 	float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
-
+	finalColor = payload.newRayDirection;
 	image[int2(LaunchID.xy)] = float4(finalColor, 1.0);
 	// image[int2(LaunchID.xy)] = time;
 }
@@ -109,7 +109,7 @@ void chit(inout Payload p, in float2 barycentrics)
 	float3 normal = InterpolateTriangle(normals, barycentrics);
 	float VdotN = dot(normal, WorldRayDirection());
 	
-	// normal = faceforward(normal, WorldRayDirection(), normal);
+	normal = faceforward(normal, WorldRayDirection(), normal);
 
 
 	if((mat.Emissive.x > 0.0 || mat.Emissive.y > 0.0 || mat.Emissive.z > 0.0))
@@ -139,18 +139,7 @@ void chit(inout Payload p, in float2 barycentrics)
 	float u1 = NextRandomFloat(rngState);
 	float u2 = NextRandomFloat(rngState);
 
-    float z = u1 * 2.0f - 1.0f;
-    float r = sqrt(max(0.0f, 1.0f - z * z));
-    float phi = 2 * PI * u2;
-    float x = r * cos(phi);
-    float y = r * sin(phi);
-
-    float3 sampleDir = float3(x, z, y);
-
-    float3 tangent, binormal;
-    GetOrthonormalBasis(normal, tangent, binormal);
-
-    float3 rayDir = (tangent * sampleDir.x + binormal * sampleDir.y + normal * sampleDir.z);
+    float3 rayDir = CalculateRandomDirectionInHemisphere(normal, u1, u2);
 
 	p.newRayDirection = rayDir;
 
