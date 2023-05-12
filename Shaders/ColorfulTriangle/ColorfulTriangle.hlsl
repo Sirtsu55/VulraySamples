@@ -27,11 +27,11 @@ void rgen()
 	const float2 pixelCenter = float2(LaunchID.xy) + float2(0.5, 0.5);
 	const float2 inUV = pixelCenter/float2(LaunchSize.xy);
 	float2 d = inUV * 2.0 - 1.0;
-	float4 target = mul(cam.projInverse, float4(d.x, d.y, 1, 1));
+	float4 target = mul(projInverse, float4(d.x, d.y, 1, 1));
 
 	RayDesc rayDesc;
-	rayDesc.Origin = mul(cam.viewInverse, float4(0,0,0,1)).xyz;
-	rayDesc.Direction = mul(cam.viewInverse, float4(normalize(target.xyz), 0)).xyz;
+	rayDesc.Origin = mul(viewInverse, float4(0,0,0,1)).xyz;
+	rayDesc.Direction = mul(viewInverse, float4(normalize(target.xyz), 0)).xyz;
 	rayDesc.TMin = 0.001;
 	rayDesc.TMax = 10000.0;
 
