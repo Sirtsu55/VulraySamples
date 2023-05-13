@@ -90,7 +90,7 @@ void GetOrthonormalBases(in float3 normal, out float3 perpendicularDirection1, o
 float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, float u1, float u2) 
 {
     
-    float theta = arc(u1);
+    float theta = acos(u1);
     float phi = TWO_PI * u2;
     
 	float z = sqrt(u1); // cos(theta)

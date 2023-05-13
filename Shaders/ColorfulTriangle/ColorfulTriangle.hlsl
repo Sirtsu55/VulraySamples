@@ -1,4 +1,3 @@
-
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
 [[vk::binding(1, 0)]] cbuffer uniformBuffer 

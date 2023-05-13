@@ -17,8 +17,6 @@ public:
     void CreateRTPipeline();
     void UpdateDescriptorSet();
 
-    void UpdateBLAS(vk::CommandBuffer cmd);
-
 public:
 
     ShaderCompiler mShaderCompiler;
@@ -55,40 +53,42 @@ void BoxIntersections::Start()
 
 void BoxIntersections::CreateAS()
 {
-    // vertex and index data for the triangle
 
-    uint32_t boxSize = sizeof(float) * 2; // min and max for each axis
+    uint32_t boxSize = sizeof(vk::AabbPositionsKHR); // 2 vec3s for the min and max of the AABB
 
-    float boxes[] = {
-        1.0f, 1.0f, 0.0f,
-        -1.0f, -1.0f, -1.0f,
-    };
-    uint32_t indices[] = { 0, 1, 2 };
+    // [POI]
+    // AABB for a box
+    auto box = vk::AabbPositionsKHR(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f);
 
     mAABBBuffer = mVRDev->CreateBuffer(
         boxSize,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
 
-
-    mVRDev->UpdateBuffer(mAABBBuffer, boxes, boxSize);
+    // copy the AABB to the buffer
+    mVRDev->UpdateBuffer(mAABBBuffer, &box, boxSize);
 
     vr::BLASCreateInfo blasCreateInfo = {};
-    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
     
-    vr::GeometryData geomData = {};
 
-    geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
+    // [POI]
+    vr::GeometryData geomData = {};
+    // Set the geometry type to AABBs, default is Triangles
+    geomData.Type = vk::GeometryTypeKHR::eAabbs;
     geomData.PrimitiveCount = 1; // 1 box
-    geomData.Stride = boxSize;
-    
+    geomData.Stride = sizeof(float) * 6; // vec3 min, vec3 max
+    // All other data is not used for AABBs, like index and vertex buffers, and index/vertex format
+
+
+    // Set the AABB buffer as the data source
     geomData.DataAddresses.AABBDevAddress = mAABBBuffer.DevAddress;
 
     blasCreateInfo.Geometries.push_back(geomData);
 
    auto [blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
-
+    mBLASHandle = blasHandle;
 
     auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(blasBuildInfo);
 
@@ -173,6 +173,8 @@ void BoxIntersections::CreateRTPipeline()
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
+    // [POI]
+    // Have a look at the shader file to see how the intersection shader is set up
     shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/CustomIntersection/RaytracedBoxes.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
@@ -184,6 +186,9 @@ void BoxIntersections::CreateRTPipeline()
     mSBT.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
+    // [POI]
+    // Set the intersection shader to the same hitgroup as the closest hit shader
+    // The intersection shader will call the closest hit shader in the same hitgroup if it reports a hit
     hitGroup.IntersectionShader = shaderModule;
     hitGroup.IntersectionShader.EntryPoint = "isect";
     
