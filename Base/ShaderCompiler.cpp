@@ -4,27 +4,6 @@
 #include <filesystem>
 #include <algorithm>
 
-static const wchar_t* GetTargetFromShaderStage(const vk::ShaderStageFlagBits stage)
-{
-    switch (stage)
-    {
-    case vk::ShaderStageFlagBits::eRaygenKHR:
-        return L"lib_6_5";
-    case vk::ShaderStageFlagBits::eClosestHitKHR:
-        return L"lib_6_5";
-    case vk::ShaderStageFlagBits::eAnyHitKHR:
-        return L"lib_6_5";
-    case vk::ShaderStageFlagBits::eIntersectionKHR:
-        return L"lib_6_5";
-    case vk::ShaderStageFlagBits::eMissKHR:
-        return L"lib_6_5";
-    case vk::ShaderStageFlagBits::eCallableKHR:
-        return L"lib_6_5";
-    case vk::ShaderStageFlagBits::eVertex:
-        return L"vs_6_5";
-    }
-    return L"";
-}
 
 
 ShaderCompiler::ShaderCompiler()
@@ -35,7 +14,7 @@ ShaderCompiler::ShaderCompiler()
 }
 
 
-std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const vk::ShaderStageFlagBits stage, const std::vector<char>& source)
+std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const std::vector<char>& source)
 {
 
     CComPtr<IDxcBlobEncoding> pSource;
@@ -44,7 +23,7 @@ std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const vk::ShaderSta
     std::vector<const wchar_t*> arguments;
 
     arguments.push_back(L"-T");
-    arguments.push_back(GetTargetFromShaderStage(stage));
+    arguments.push_back(L"lib_6_5");
 
     arguments.push_back(L"-E");
     arguments.push_back(L"main");
@@ -82,11 +61,11 @@ std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const vk::ShaderSta
     return std::vector<uint32_t>((uint32_t*)pSpirv->GetBufferPointer(), (uint32_t*)pSpirv->GetBufferPointer() + spirvSize);
 }
 
-std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromFile(const vk::ShaderStageFlagBits stage, const std::string& file)
+std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromFile(const std::string& file)
 {
     std::vector<char> shaderCode;
     FileRead(file, shaderCode);
-    return CompileSPIRVFromSource(stage, shaderCode);
+    return CompileSPIRVFromSource(shaderCode);
 }
 
 ShaderCompiler::~ShaderCompiler()

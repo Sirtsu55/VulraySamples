@@ -1,4 +1,3 @@
-
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
 [[vk::binding(1, 0)]] cbuffer uniformBuffer 
@@ -38,14 +37,24 @@ void rgen()
 	image[int2(LaunchID.xy)] = float4(payload.hitValue, 0.0);
 }
 
+struct BoxHitAttributes
+{
+	float2 hitValue;
+};
 
+[shader("intersection")]
+void isect()
+{
+	BoxHitAttributes attribs;
+	attribs.hitValue = float2(1.0, 1.0);
+    ReportHit(0, 0, attribs);
+}
 
 
 [shader("closesthit")]
 void chit(inout Payload p, in float2 attribs)
 {
-  const float3 barycentricCoords = float3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-  p.hitValue = barycentricCoords;
+  p.hitValue = float3(1.0, 0.0, 0.0);
 }
 
 
