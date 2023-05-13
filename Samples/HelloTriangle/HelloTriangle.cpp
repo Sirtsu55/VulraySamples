@@ -220,16 +220,14 @@ void HelloTriangle::CreateRTPipeline()
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
     // Shader compiler class from from Base/ will perform HLSL -> SPIR-V translation.
-    // We put eRaygenKHR as stage, but it has to be one of the ray tracing stages, because DXC compiler will use 
-    // lib_6_x to compile any of the ray tracing stages eg. eRaygenKHR, eMissKHR, eClosestHitKHR, eAnyHitKHR, eIntersectionKHR -> lib_6_x
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    // DXC compiler will use lib_6_5 to compile any of the ray tracing stages eg. eRaygenKHR, eMissKHR, eClosestHitKHR, eAnyHitKHR, eIntersectionKHR
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
     // since HLSL allows multiple entry points in a single shader, we have all of the ray tracing stages in one shader
     // if compiling from glsl we would have to create a separate shader module for each stage
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     // add the shader to the shader binding table which stores all the shaders for the pipeline
     mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
     // entry point for the ray generation shader, if there are multiple entry points in the shader.
     // In this case we are using one shader module with all the required entry points, 
     // but by default it is "main" because most GLSL compilers use "main" as the default entry point
@@ -237,7 +235,6 @@ void HelloTriangle::CreateRTPipeline()
 
 
     mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
     mSBT.MissShaders.back().EntryPoint = "miss";
 
     // [POI]
@@ -245,7 +242,6 @@ void HelloTriangle::CreateRTPipeline()
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    hitGroup.ClosestHitShader.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     mSBT.HitGroups.push_back(hitGroup);
     
     // create the ray tracing pipeline

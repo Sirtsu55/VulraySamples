@@ -244,22 +244,19 @@ void Shading::CreateRTPipeline()
     
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/Shading/Shading.hlsl");
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
     mSBT.RayGenShader.EntryPoint = "rgen"; 
 
 
     mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
     mSBT.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    hitGroup.ClosestHitShader.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     mSBT.HitGroups.push_back(hitGroup);
     
 

@@ -60,8 +60,8 @@ void BoxIntersections::CreateAS()
     uint32_t boxSize = sizeof(float) * 2; // min and max for each axis
 
     float boxes[] = {
-        1.0f, -1.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f,
+        1.0f, 1.0f, 0.0f,
+        -1.0f, -1.0f, -1.0f,
     };
     uint32_t indices[] = { 0, 1, 2 };
 
