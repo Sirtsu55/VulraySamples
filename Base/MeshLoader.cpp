@@ -123,7 +123,6 @@ void MeshLoader::AddMeshToScene(const tinygltf::Mesh& mesh, tinygltf::Model& mod
             auto& positionsBuffer = model.buffers[positionsView.buffer];
             auto& positionsData = positionsBuffer.data;
             outGeom.Vertices.resize(positionsAccessor.count);
-
             auto components = GetComponentsFromTinyGLTFType(positionsAccessor.type);
             auto size = GetSizeFromType(positionsAccessor.componentType);
 

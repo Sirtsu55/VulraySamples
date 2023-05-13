@@ -2,7 +2,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 2
+#define RECURSION_LENGTH 4
 
 
 // vk::binding(binding, set)
@@ -79,8 +79,10 @@ void rgen()
 	
 	float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
 
+
 	finalColor = pow(finalColor.rgb, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
-	image[int2(LaunchID.xy)] = float4(finalColor, 1.0);
+
+	image[int2(LaunchID.xy)] = float4(saturate(finalColor), 1.0);
 }
 
 float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint index)
@@ -112,7 +114,6 @@ void chit(inout Payload p, in float2 barycentrics)
 	float VdotN = dot(normal, WorldRayDirection());
 	
 	normal = faceforward(normal, WorldRayDirection(), normal);
-
 
 	if((mat.Emissive.x > 0.0 || mat.Emissive.y > 0.0 || mat.Emissive.z > 0.0))
 	{
@@ -158,7 +159,7 @@ void miss(inout Payload p)
 {
     p.hitValue.xyz = float3(0.1, 0.7, 1.0);
 	p.hitPoint = float4(0.0, 0.0, 0.0, -1.0);
-	p.lightContribution = float3(0.2, 0.2, 0.2);
+	p.lightContribution = float3(0.05, 0.05, 0.05);
 	p.newRayDirection = float3(0.0, 0.0, 0.0);
 }
 

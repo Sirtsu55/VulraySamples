@@ -35,25 +35,15 @@ float3 InterpolateTriangle(float3 vertexAttribute[3], in float2 barycentrics)
         barycentrics.y * (vertexAttribute[0] - vertexAttribute[2]); // barycentric interpolation
 }
 
-// Code from https://github.com/TheRealMJP/DXRPathTracer
-// Explanation: https://computergraphics.stackexchange.com/a/4994 and https://agraphicsguy.wordpress.com/2015/11/01/sampling-microfacet-brdf/
-//----------------------------------------------------------------------
-float3 SampleDirectionGGX(float3 v, float3 n, float roughness, float u1, float u2)
+
+float3 SphericalToCartesian(float theta, float phi)
 {
-    float theta = atan2(roughness * sqrt(u1), sqrt(1 - u1));
-    float phi = 2 * PI * u2;
-
-    float3 h;
-    h.x = sin(theta) * cos(phi);
-    h.y = sin(theta) * sin(phi);
-    h.z = cos(theta);
-
-    float3 sampleDir = 2.0f * dot(h, v) * h - v;
-    return normalize(sampleDir);
+    return float3(
+        cos(phi) * sin(theta),
+        sin(phi) * sin(theta),
+        cos(theta)
+    );
 }
-//----------------------------------------------------------------------
-
-
 
 
 
@@ -74,27 +64,10 @@ float3 SchlickApproximation(float3 specularColor, float angle)
 
 // Code from https://github.com/rtx-on/rtx-explore, Directory = src/D3D12PathTracer/src/shaders/Raytracing.hlsl
 //----------------------------------------------------------------------
-float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, float u1, float u2) {
 
-	float up = sqrt(u1); // cos(theta)
-	float over = sqrt(1 - up * up); // sin(theta)
-	float around = u2 * TWO_PI;
-
-
-    // float theta = atan2(roughness * sqrt(u1), sqrt(1 - u1));
-    // float phi = TWO_PI * u2;
-
-    // float3 v = WorldRayDirection();
-
-    // float3 h;
-    // h.x = sin(theta) * cos(phi);
-    // h.y = sin(theta) * sin(phi);
-    // h.z = cos(theta);
-
-    // float3 sampleDir = 2.0f * dot(h, v) * h - v;
-
-    float3 directionNotNormal = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 0, 1);
-
+void GetOrthonormalBases(in float3 normal, out float3 perpendicularDirection1, out float3 perpendicularDirection2)
+{
+    // Original code from GitHub
 	// if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
 	// 	directionNotNormal = float3(1, 0, 0);
 	// }
@@ -105,18 +78,35 @@ float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, floa
 	// 	directionNotNormal = float3(0, 0, 1);
 	// }
 
+    // adapted code, works the same way and less branching
+    float3 directionNotNormal = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 1, 0);
+
 	// Use not-normal direction to generate two perpendicular directions
-	float3 perpendicularDirection1 =
-		normalize(cross(normal, directionNotNormal));
-	float3 perpendicularDirection2 =
-		normalize(cross(normal, perpendicularDirection1));
-
-    // return sampleDir.x * perpendicularDirection1
-    //     + sampleDir.y * perpendicularDirection2
-    //     + sampleDir.z * normal;
-
-	return up * normal
-		+ cos(around) * over * perpendicularDirection1
-		+ sin(around) * over * perpendicularDirection2;
+	perpendicularDirection1 = normalize(cross(normal, directionNotNormal));
+	perpendicularDirection2 = normalize(cross(normal, perpendicularDirection1));
 }
+
 //----------------------------------------------------------------------
+float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, float u1, float u2) 
+{
+    
+    float theta = arc(u1);
+    float phi = TWO_PI * u2;
+    
+	float z = sqrt(u1); // cos(theta)
+	float y = sqrt(1 - z * z); // sin(theta)
+	float x = u2 * TWO_PI;
+
+    float3 perpendicularDirection1;
+    float3 perpendicularDirection2;
+
+    GetOrthonormalBases(normal, perpendicularDirection1, perpendicularDirection2);
+
+    float3 cartesian = SphericalToCartesian(theta, phi);
+
+
+    float3 sampleDir = cartesian.x * perpendicularDirection1 + cartesian.y * perpendicularDirection2 + cartesian.z * normal;
+
+	return sampleDir;
+}
+
