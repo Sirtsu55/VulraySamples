@@ -85,8 +85,14 @@ void GetOrthonormalBases(in float3 normal, out float3 perpendicularDirection1, o
 	perpendicularDirection1 = normalize(cross(normal, directionNotNormal));
 	perpendicularDirection2 = normalize(cross(normal, perpendicularDirection1));
 }
-
 //----------------------------------------------------------------------
+
+// Function of X+ as defined in the paper
+float XPlusGGX(float x)
+{
+    return x > 0 ? 1 : 0;
+}
+
 float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, float u1, float u2) 
 {
     
@@ -104,9 +110,50 @@ float3 CalculateRandomDirectionInHemisphere(float3 normal, float roughness, floa
 
     float3 cartesian = SphericalToCartesian(theta, phi);
 
-
     float3 sampleDir = cartesian.x * perpendicularDirection1 + cartesian.y * perpendicularDirection2 + cartesian.z * normal;
 
 	return sampleDir;
 }
 
+
+// GGX Microfacet Distribution
+// In the paper this is G1(v, m) where v is the view vector and m is the microfacet normal 
+float GGXGeometryTerm(in float3 n, in float3 v, in float3 m, in float roughness)
+{
+    // Formula for G1 term
+    // X+((V * M )/(V * N)) * (2 / 1 + sqrt(1 + alpha^2 * tan^2(theta)))
+
+    float X = XPlusGGX(dot(v, m) / dot(v, n));
+
+    float NdotV = dot(n, v);
+
+    float tanTheta = (1 - NdotV) / NdotV; // tan is sin/cos 
+
+    float denom = 1 + sqrt(1 + roughness * roughness * tanTheta * tanTheta);
+
+    float geometryTermResult = X * (2 / denom;)
+
+}
+
+float GGXDistribution(in float3 n, in float3 m, in float roughness)
+{
+    // Formula for GGX distribution
+    // (X+(m * n) * alpha^2 )/ (pi * (cos^4(theta) * (alpha^2 - 1) + 1)^2)
+
+    float X = XPlusGGX(dot(n, m));
+
+
+    float cosTheta = dot(n, m)
+
+    float roughness2 = roughness * roughness;
+
+    float tanTheta2 = pow((1 - cosTheta) / cosTheta, 2);
+
+
+    float numeraor = X * roughness2;
+    float denominator = PI * pow(cosTheta, 4) * pow(roughness2 * tanTheta2, 2);
+
+    float distributionResult = numerator / denominator;
+
+    return distributionResult;
+}

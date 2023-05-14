@@ -2,7 +2,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 4
+#define RECURSION_LENGTH 2
 
 
 // vk::binding(binding, set)
@@ -10,7 +10,7 @@
 
 [[vk::binding(1, 0)]] cbuffer uniformBuffer 
 { 
-	float4x4 viewInverse;
+	float4x4 viewInverse;	
 	float4x4 projInverse;
 	float4 time; // time is in x, other values are unused / padding
 };
