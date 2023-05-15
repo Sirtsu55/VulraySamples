@@ -2,7 +2,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 2
+#define RECURSION_LENGTH 4
 
 
 // vk::binding(binding, set)
@@ -100,9 +100,7 @@ float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint inde
 [shader("closesthit")]
 void chit(inout Payload p, in float2 barycentrics)
 {
-	uint matIndex = InstanceID() + GeometryIndex();
-
-	GPUMaterial mat = materials[matIndex];
+	GPUMaterial mat = materials[InstanceID() + GeometryIndex()];
 
 	float3 normals[3] = {
 		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 0),
@@ -111,45 +109,11 @@ void chit(inout Payload p, in float2 barycentrics)
 	};
 
 	float3 normal = InterpolateTriangle(normals, barycentrics);
+	
 	float VdotN = dot(normal, WorldRayDirection());
 	
 	normal = faceforward(normal, WorldRayDirection(), normal);
 
-	if((mat.Emissive.x > 0.0 || mat.Emissive.y > 0.0 || mat.Emissive.z > 0.0))
-	{
-		p.lightContribution = mat.Emissive;
-		p.hitValue.xyz = mat.Emissive;
-		p.hitPoint.w = -1.0; // terminate ray
-	}
-	else
-	{
-		p.lightContribution = float3(0.0, 0.0, 0.0);
-		p.hitPoint.w = 1.0;
-	}
-
-
-	float specular = saturate(mat.Metallic + 0.01); // Gltf has no specular, so we use metallic instead and assume specular = metallic we add epsilon to avoid 0
-	float roughness = mat.Roughness;
-
-
-	p.hitValue.w = SchlickApproximation(specular, abs(VdotN)); // next ray will be attenuated by this amount
-
-	float rayContrib = 1.0 - p.hitValue.w; // how much light is reflected by the surface
-
-	uint rngState = asint(time.x) * asint(WorldRayDirection().x) * asint(WorldRayDirection().y) * asint(WorldRayDirection().z);
-	// rngState *= asint(WorldRayDirection().x);
-	
-	float u1 = NextRandomFloat(rngState);
-	float u2 = NextRandomFloat(rngState);
-
-    float3 rayDir = CalculateRandomDirectionInHemisphere(normal, roughness, u1, u2);
-
-	p.newRayDirection = rayDir;
-
-
-
-	p.hitPoint.xyz = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-	p.hitValue.xyz = mat.BaseColor * rayContrib;
 
 }
 
