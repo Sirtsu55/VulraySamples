@@ -2,7 +2,7 @@
 #include "Shaders/Common/Functions.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 4
+#define RECURSION_LENGTH 1
 
 
 // vk::binding(binding, set)
@@ -77,8 +77,8 @@ void rgen()
 	}
 
 	
-	float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
-
+	// float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
+	float3 finalColor = AccumulatedColor;
 
 	finalColor = pow(finalColor.rgb, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
 
@@ -100,6 +100,8 @@ float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint inde
 [shader("closesthit")]
 void chit(inout Payload p, in float2 barycentrics)
 {
+	float3 v = WorldRayDirection();
+
 	GPUMaterial mat = materials[InstanceID() + GeometryIndex()];
 
 	float3 normals[3] = {
@@ -109,12 +111,22 @@ void chit(inout Payload p, in float2 barycentrics)
 	};
 
 	float3 normal = InterpolateTriangle(normals, barycentrics);
+
+	normal = faceforward(normal, v, normal); // make sure normal is facing the camera
+
+	uint seed = asint(time.x) * asint(v.x) * asint(v.y) * asint(v.z);
+
+	float u1 = NextRandomFloat(seed);
+	float u2 = NextRandomFloat(seed);
 	
-	float VdotN = dot(normal, WorldRayDirection());
+	float VdotN = dot(v, normal);
 	
-	normal = faceforward(normal, WorldRayDirection(), normal);
+	float3 microfacetNormal = GGXRandomDirection(normal, v, mat.Roughness, u1, u2); // also called half vector
+	float3 wo = -v; // outgoing direction of light, so it is the direction of the ray, because we are tracing from a camera
+	float3 wi = reflect(v, microfacetNormal); // incoming direction of light
 
 
+	p.hitValue.xyz = wi;
 }
 
 

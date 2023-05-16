@@ -45,8 +45,6 @@ float3 SphericalToCartesian(float theta, float phi)
     );
 }
 
-
-
 // Computes the Fresnel term for a dielectric material using Schlick's approximation
 // Specular is the specular intensity
 float SchlickApproximation(float specular, float angle)
@@ -96,10 +94,12 @@ float XPlusGGX(float x)
     return step(0, x);
 }
 
-float3 CalculateRandomDirectionInHemisphere(float3 normal, float3 viewDir, float roughness, float u1, float u2) 
+float3 GGXRandomDirection(float3 normal, float3 viewDir, float roughness, float u1, float u2) 
 {
-    
-    float theta = acos(u1);
+    // Formula for GGX random direction
+    // arctan(roughness * sqrt(u1) / sqrt(1 - u1))
+
+    float theta = atan(roughness * sqrt(u1) / sqrt(1 - u1));
     float phi = TWO_PI * u2;
     
 	float z = sqrt(u1); // cos(theta)
@@ -114,8 +114,6 @@ float3 CalculateRandomDirectionInHemisphere(float3 normal, float3 viewDir, float
     float3 cartesian = SphericalToCartesian(theta, phi);
 
     float3 sampleDir = cartesian.x * perpendicularDirection1 + cartesian.y * perpendicularDirection2 + cartesian.z * normal;
-
-    sampleDir = normalize(2 * dot(viewDir, sampleDir) * sampleDir - viewDir);
 
 	return sampleDir;
 }
@@ -141,7 +139,7 @@ float GGXPartialGeometryTerm(in float3 v, in float3 m, in float3 n, in float rou
     return geometryTermResult;
 }
 
-float GGXDistribution(in float3 n, in float3 m, in float3 v, in float roughness, out float probability)
+float GGXDistribution(in float3 n, in float3 m, in float roughness)
 {
     // Formula for GGX distribution
     // (X+(m * n) * alpha^2 )/ (pi * (cos^4(theta) * (alpha^2 - 1) + 1)^2)
@@ -161,9 +159,6 @@ float GGXDistribution(in float3 n, in float3 m, in float3 v, in float roughness,
 
 
     float distributionResult = numerator / denominator;
-
-    // Equation 38 in the paper
-    probability = (distributionResult  * cosTheta) / 4 * (dot(v, m));
 
     return distributionResult;
 }
