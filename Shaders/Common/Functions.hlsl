@@ -51,8 +51,7 @@ float SchlickApproximation(float specular, float angle)
 {
     // Take the absolute value of the dot product to avoid negative values which can occur
     // if dotting a normal and view vector behind the surface
-    float dotNV = abs(angle);
-    return specular + (1.0f - specular) * pow(1.0f - dotNV, 5.0f);
+    return specular + (1.0f - specular) * pow(1.0f - angle, 5.0f);
 }
 
 float3 SchlickApproximation(float3 specularColor, float angle)
@@ -65,6 +64,8 @@ float3 SchlickApproximation(float3 specularColor, float angle)
 
 void GetOrthonormalBases(in float3 normal, out float3 perpendicularDirection1, out float3 perpendicularDirection2)
 {
+    float3 directionNotNormal = float3(0, 0, 0);
+    
     // Original code from GitHub
 	// if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
 	// 	directionNotNormal = float3(1, 0, 0);
@@ -77,7 +78,7 @@ void GetOrthonormalBases(in float3 normal, out float3 perpendicularDirection1, o
 	// }
 
     // adapted code, works the same way and less branching
-    float3 directionNotNormal = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 1, 0);
+    directionNotNormal = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 1, 0);
 
 	// Use not-normal direction to generate two perpendicular directions
 	perpendicularDirection1 = normalize(cross(normal, directionNotNormal));
@@ -94,17 +95,14 @@ float XPlusGGX(float x)
     return step(0, x);
 }
 
-float3 GGXRandomDirection(float3 normal, float3 viewDir, float roughness, float u1, float u2) 
+float3 GGXRandomDirection(float3 normal, float roughness, float u1, float u2) 
 {
     // Formula for GGX random direction
     // arctan(roughness * sqrt(u1) / sqrt(1 - u1))
 
-    float theta = atan(roughness * sqrt(u1) / sqrt(1 - u1));
+    // float theta = atan(roughness * sqrt(u1) / sqrt(1 - u1));
+    float theta = acos(u1);
     float phi = TWO_PI * u2;
-    
-	float z = sqrt(u1); // cos(theta)
-	float y = sqrt(1 - z * z); // sin(theta)
-	float x = u2 * TWO_PI;
 
     float3 perpendicularDirection1;
     float3 perpendicularDirection2;
