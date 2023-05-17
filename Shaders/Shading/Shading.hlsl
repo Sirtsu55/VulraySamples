@@ -1,5 +1,6 @@
 #include "Shaders/Common/Material.hlsl"
 #include "Shaders/Common/Functions.hlsl"
+#include "Shaders/Common/Camera.hlsl"
 
 #define PATH_SAMPLES 4
 #define RECURSION_LENGTH 1
@@ -35,54 +36,20 @@ void rgen()
 	uint3 LaunchSize = DispatchRaysDimensions();
 
 	const float2 pixelCenter = float2(LaunchID.xy) + float2(0.5, 0.5);
-	const float2 inUV = pixelCenter/float2(LaunchSize.xy);
-	float2 d = inUV * 2.0 - 1.0;
-	float4 target = mul(projInverse, float4(d.x, d.y, 1, 1));
+	const float2 uv = pixelCenter / float2(LaunchSize.xy);
 
-	RayDesc rayDesc;
-	rayDesc.Origin = mul(viewInverse, float4(0,0,0,1)).xyz;
-	rayDesc.Direction = mul(viewInverse, float4(normalize(target.xyz), 0)).xyz;
-	rayDesc.TMin = 0.001;
-	rayDesc.TMax = 10000.0;
+	RayDesc ray = ConstructRay(viewInverse, projInverse, uv);
 
-	Payload payload;
-	payload.hitValue = float4(0.0, 0.0, 0.0, 1.0);
-	payload.lightContribution = float3(0.0, 0.0, 0.0);
 
-	float3 AccumulatedColor = float3(0.0, 0.0, 0.0);
+	Payload p;
 
-	int RecursionDepth = 0;
-	float attenuation = 1.0;
+	TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, ray, p);
 
-	while (RecursionDepth < RECURSION_LENGTH)
-	{
-		RecursionDepth++;
+	float3 finalColor = pow(p.hitValue.rgb, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
 
-		TraceRay(rs, RAY_FLAG_NONE, 0xFF, 0, 0, 0, rayDesc, payload);
+	image[int2(LaunchID.xy)] = float4(finalColor, 0.0);
 
-		rayDesc.Direction = payload.newRayDirection;
-		rayDesc.Origin = payload.hitPoint.xyz;
 
-		if (payload.hitPoint.w < 0.0)
-		{
-			AccumulatedColor += payload.hitValue.xyz;
-			break;
-		}
-
-		// atennuate color 
-		AccumulatedColor += payload.hitValue.xyz * attenuation;
-		
-		// update attenuation
-		attenuation *= payload.hitValue.w;
-	}
-
-	
-	// float3 finalColor = AccumulatedColor * payload.lightContribution / float(RecursionDepth);
-	float3 finalColor = AccumulatedColor;
-
-	finalColor = pow(finalColor.rgb, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
-
-	image[int2(LaunchID.xy)] = float4(saturate(finalColor), 1.0);
 }
 
 float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint index)
