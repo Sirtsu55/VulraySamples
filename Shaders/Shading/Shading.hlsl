@@ -3,7 +3,7 @@
 #include "Shaders/Common/Camera.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 1
+#define RECURSION_LENGTH 2
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -21,7 +21,7 @@
 struct HitInfo
 {
 	float3 Color;
-	float Atennuation;
+	float Attenuation;
 	float3 LightContribution;
 	bool TerminateRay;
 };
@@ -63,12 +63,12 @@ void rgen()
 		ray.Direction = p.RayInfo.Direction;
 
 		ColorAttenuation.xyz += p.Info.Color * ColorAttenuation.w;
-		ColorAttenuation.w *= p.Info.Atennuation;
+		ColorAttenuation.w *= p.Info.Attenuation;
 		if(p.Info.TerminateRay)
 			break;
 	}
 	
-	float3 finalColor = (ColorAttenuation.xyz) / float(RecursionDepth);
+	float3 finalColor = (ColorAttenuation.xyz /* * p.Info.LightContribution*/ )  / float(RecursionDepth);
 	finalColor = pow(finalColor, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
 
 	image[int2(LaunchID.xy)] = float4(finalColor, 0.0);
@@ -102,7 +102,7 @@ void chit(inout Payload p, in float2 barycentrics)
 	};
 
 	float3 normal = InterpolateTriangle(normals, barycentrics);
-	// normal = faceforward(normal, v, normal); // make sure normal is facing the camera
+	normal = faceforward(normal, v, normal); // make sure normal is facing the camera
 
 
 	uint seed = asint(time.x) * asint(v.x) * asint(v.y) * asint(v.z);
@@ -110,18 +110,23 @@ void chit(inout Payload p, in float2 barycentrics)
 	float u1 = NextRandomFloat(seed);
 	float u2 = NextRandomFloat(seed);
 	
-	float3 microfacetNormal = GGXRandomDirection(normal, mat.Roughness, u1, u2); // also called half vector
+	float3 m = GGXRandomDirection(normal, mat.Roughness, u1, u2); // also called half vector
 
-	float3 wo = -v; // outgoing direction of light, so it is the direction of the ray, because we are tracing from a camera
 
-	float3 wi = reflect(v, microfacetNormal); // incoming direction of light
+	float3 wi = reflect(v, m); // reflect the view vector around the half vector to get the incoming light direction
+
+
+
+	float D = GGXDistribution(normal, m, mat.Roughness);
+
+
 	p.RayInfo.Direction = wi;
 	p.RayInfo.Origin = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 
 	p.Info.LightContribution = any(mat.Emissive) ? mat.Emissive : float3(0.0, 0.0, 0.0); // if emissive is set, then this is a light source
-	p.Info.TerminateRay = any(mat.Emissive); 
-	p.Info.Color = microfacetNormal;
-	p.Info.Atennuation = 1.0;
+	p.Info.TerminateRay =  dot(wi, normal) < 0.0 ? true : any(mat.Emissive); 
+	p.Info.Color = mat.BaseColor;
+	p.Info.Attenuation = 1.0;
 
 }
 
@@ -130,8 +135,8 @@ void chit(inout Payload p, in float2 barycentrics)
 void miss(inout Payload p)
 {
 	p.Info.Color = float3(0.0, 0.0, 0.0);
-	p.Info.Atennuation = 1.0;
-	p.Info.LightContribution = float3(0.2, 0.2, 0.0);
+	p.Info.Attenuation = 1.0;
+	p.Info.LightContribution = float3(0.0, 0.0, 0.0);
 	p.Info.TerminateRay = true;
 }
 

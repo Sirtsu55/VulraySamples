@@ -100,8 +100,7 @@ float3 GGXRandomDirection(float3 normal, float roughness, float u1, float u2)
     // Formula for GGX random direction
     // arctan(roughness * sqrt(u1) / sqrt(1 - u1))
 
-    // float theta = atan(roughness * sqrt(u1) / sqrt(1 - u1));
-    float theta = acos(u1);
+    float theta = atan(roughness * sqrt(u1) / sqrt(1 - u1));
     float phi = TWO_PI * u2;
 
     float3 perpendicularDirection1;
