@@ -1,3 +1,4 @@
+#pragma once
 #include <vulkan/vulkan.hpp>
 
 #ifdef _WIN32
@@ -15,8 +16,8 @@ public:
 
     ~ShaderCompiler();
 
-    std::vector<uint32_t> CompileSPIRVFromSource(const vk::ShaderStageFlagBits stage, const std::vector<char>& source);
-    std::vector<uint32_t> CompileSPIRVFromFile(const vk::ShaderStageFlagBits stage, const std::string& file);
+    std::vector<uint32_t> CompileSPIRVFromSource(const std::vector<char>& source);
+    std::vector<uint32_t> CompileSPIRVFromFile(const std::string& file);
 private:
 
     CComPtr<IDxcUtils> mUtils;

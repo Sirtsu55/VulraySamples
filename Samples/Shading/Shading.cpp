@@ -5,9 +5,13 @@
 #include "ShaderCompiler.h"
 #include "MeshLoader.h"
 #include "GPUMaterial.h"
+#include "Helpers.h"
+
+// This sample isn't much about the c++ code, but more about the shaders
 
 
-class MeshMaterials : public Application
+
+class Shading : public Application
 {
 public:
     virtual void Start() override;
@@ -18,6 +22,8 @@ public:
     void CreateAS();
     void CreateRTPipeline();
     void UpdateDescriptorSet();
+
+    void CreateAccumulationImage();
 
 public:
     MeshLoader mMeshLoader;
@@ -34,6 +40,9 @@ public:
 
 
     vr::AllocatedBuffer mMaterialBuffer;
+    
+    vr::AllocatedImage mAccumulationImageBuffer;
+    vr::AccessibleImage mAccumulationImage;
 
     vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
 	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
@@ -47,10 +56,11 @@ public:
 
 };
 
-void MeshMaterials::Start()
+void Shading::Start()
 {
     //defined in the base application class, creates an output image to render to and a camera uniform buffer
     CreateBaseResources();
+    CreateAccumulationImage();
     
     CreateAS();
     
@@ -59,11 +69,11 @@ void MeshMaterials::Start()
 
 }
 
-void MeshMaterials::CreateAS()
+void Shading::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/spheres.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
@@ -78,28 +88,21 @@ void MeshMaterials::CreateAS()
     uint32_t matBufferSize = 0;
 
     // calculate the size required for the buffers
-    for (auto& mesh : scene.Meshes)
-    {
-        for (auto& geomRef : mesh.GeometryReferences)
-        {
-            vertBufferSize += geometries[geomRef].Vertices.size() * sizeof(Vertex);
-            idxBufferSize += geometries[geomRef].Indices.size() * sizeof(uint32_t);
-            matBufferSize += sizeof(GPUMaterial);
-        }
-        transBufferSize += sizeof(vk::TransformMatrixKHR);
-    }
+    // Helper function defined in Base/Helpers.h 
+    // writes to the parameters passed in
+    CalculateBufferSizes(scene, vertBufferSize, idxBufferSize, transBufferSize, matBufferSize);
 
     // Store all the primitives in a single buffer, it is efficient to do so
     mVertexBuffer = mVRDev->CreateBuffer(
         vertBufferSize, 
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer
     );
 
     mIndexBuffer = mVRDev->CreateBuffer(
         idxBufferSize, 
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer
     );
 
     mMaterialBuffer = mVRDev->CreateBuffer(
@@ -117,7 +120,6 @@ void MeshMaterials::CreateAS()
 
 
 	// Create info struct for the BLAS
-    vr::BLASCreateInfo blasCreateInfo = {};
     std::vector<vr::BLASCreateInfo> blasCreateInfos;
 
     // Store the instanceID for each mesh so that we can use it to index into the material buffer
@@ -134,51 +136,10 @@ void MeshMaterials::CreateAS()
     char* transData = (char*)mVRDev->MapBuffer(mTransformBuffer);
     char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
 
-    for (auto& mesh : scene.Meshes)
-    {
-        auto& blasinfo = blasCreateInfos.emplace_back(vr::BLASCreateInfo{});
-        blasinfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-        // [POI]
-        // The materials are stored like this  
-        // The instance ID for the TLAS is n Meshes + n Geometries
-        // if Mesh at index 0 has 2 geometries, the instance ID for the first geometry is 0 and the second Mesh is 2, because there 
-        // are 2 materials before the second mesh, because Mesh 0 has 2 geometries.
-        // Similarly, if Mesh at index 1 has 3 geometries, the next Mesh Instance ID is 2(Geometries) + 3(Geometries) = 5
-        // This is the calculation for the instance ID
-        instanceIDs.push_back(matOffset / sizeof(GPUMaterial)); // store the instanceID for the mesh
-
-        for (auto& geomRef : mesh.GeometryReferences)
-        {
-			auto& geom = geometries[geomRef];
-			vr::GeometryData geomData = {};
-			geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
-			geomData.Stride = sizeof(Vertex);
-			geomData.IndexFormat = vk::IndexType::eUint32;
-			geomData.PrimitiveCount = geom.Indices.size() / 3;
-			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset * sizeof(Vertex);
-			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset * sizeof(uint32_t);
-			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress + transOffset;
-			blasinfo.Geometries.push_back(geomData);
-			
-            GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
-            mat.BaseColor = geom.Material.BaseColorFactor;
-            mat.Roughness = geom.Material.RoughnessFactor;
-            mat.Metallic = geom.Material.MetallicFactor;
-            mat.VertBufferOffset = vertOffset;
-            mat.IndexBufferOffset = idxOffset;
-
-			memcpy(vertData + vertOffset, geom.Vertices.data(), geom.Vertices.size() * sizeof(Vertex));
-			memcpy(idxData + idxOffset, geom.Indices.data(), geom.Indices.size() * sizeof(uint32_t));
-            memcpy(matData + matOffset, &mat, sizeof(GPUMaterial));
-
-			vertOffset += geom.Vertices.size();
-			idxOffset += geom.Indices.size();
-            matOffset += sizeof(GPUMaterial); // material for each geometry
-		}
-
-        memcpy(transData + transOffset, &mesh.Transform, sizeof(vk::TransformMatrixKHR));
-        transOffset += sizeof(vk::TransformMatrixKHR);
-    }
+    // Helper function defined in Base/Helpers.h to copy the scene data into the buffers
+    CopySceneToBuffers(scene, vertData, idxData, transData, matData,
+        mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, mTransformBuffer.DevAddress,
+        instanceIDs, blasCreateInfos, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
 
 
     mVRDev->UnmapBuffer(mVertexBuffer);
@@ -219,7 +180,7 @@ void MeshMaterials::CreateAS()
         auto inst = vk::AccelerationStructureInstanceKHR()
             .setInstanceCustomIndex(instanceIDs[i]) // set the instance ID 
             .setAccelerationStructureReference(mBLASHandles[i].BLASBuffer.DevAddress)
-            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
+            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFlipFacing)
             .setMask(0xFF)
             .setInstanceShaderBindingTableRecordOffset(0);
 
@@ -272,14 +233,43 @@ void MeshMaterials::CreateAS()
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 }
 
+void Shading::CreateAccumulationImage()
+{
+    auto imgInfo = vk::ImageCreateInfo()
+        .setImageType(vk::ImageType::e2D)
+        .setFormat(vk::Format::eR32G32B32A32Sfloat)
+        .setExtent(vk::Extent3D(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height, 1))
+        .setMipLevels(1)
+        .setArrayLayers(1)
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setTiling(vk::ImageTiling::eOptimal)
+        .setUsage(vk::ImageUsageFlagBits::eStorage)
+        .setSharingMode(vk::SharingMode::eExclusive)
+        .setInitialLayout(vk::ImageLayout::eUndefined);
 
-void MeshMaterials::CreateRTPipeline()
+    mAccumulationImageBuffer = mVRDev->CreateImage(imgInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
+
+    auto viewInfo = vk::ImageViewCreateInfo()
+        .setImage(mAccumulationImageBuffer.Image)
+        .setViewType(vk::ImageViewType::e2D)
+        .setFormat(vk::Format::eR32G32B32A32Sfloat)
+        .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+    
+    mAccumulationImage.View = mDevice.createImageView(viewInfo);
+    mAccumulationImage.Layout = vk::ImageLayout::eGeneral;
+    // Create the accumulation image
+}
+
+void Shading::CreateRTPipeline()
 {
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
-        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
+        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
-        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer)
+        vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),
+        vr::DescriptorItem(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mVertexBuffer),
+        vr::DescriptorItem(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mIndexBuffer),
+        vr::DescriptorItem(6, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mAccumulationImage),
     };
 
 
@@ -287,7 +277,7 @@ void MeshMaterials::CreateRTPipeline()
     
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulGeometry/ColorfulGeometry.hlsl");
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     mSBT.RayGenShader = shaderModule;
@@ -314,16 +304,15 @@ void MeshMaterials::CreateRTPipeline()
     // create a descriptor buffer for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
-
 }
 
 
-void MeshMaterials::UpdateDescriptorSet()
+void Shading::UpdateDescriptorSet()
 {
     mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);
 }
 
-void MeshMaterials::Update(vk::CommandBuffer renderCmd)
+void Shading::Update(vk::CommandBuffer renderCmd)
 {
     // begin the command buffer
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
@@ -332,7 +321,7 @@ void MeshMaterials::Update(vk::CommandBuffer renderCmd)
     mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
 
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
-
+    
     mVRDev->TransitionImageLayout(
         mOutputImageBuffer.Image,
         vk::ImageLayout::eUndefined,
@@ -342,12 +331,16 @@ void MeshMaterials::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight);
 
-    // Helper function in Application Class to blit the image to the swapchain image
+    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
+
     BlitImage(renderCmd);
 
+
+
     renderCmd.end();
+
+
 
     WaitForRendering();
 
@@ -358,7 +351,7 @@ void MeshMaterials::Update(vk::CommandBuffer renderCmd)
 }
 
 
-void MeshMaterials::Stop()
+void Shading::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
@@ -372,6 +365,9 @@ void MeshMaterials::Stop()
 
     mDevice.destroyDescriptorSetLayout(mResourceDescriptorLayout);
     mVRDev->DestroyBuffer(mResourceDescBuffer.Buffer);
+
+    mDevice.destroyImageView(mAccumulationImage.View);
+    mVRDev->DestroyImage(mAccumulationImageBuffer);
 
     mVRDev->DestroyBuffer(mVertexBuffer);
     mVRDev->DestroyBuffer(mIndexBuffer);
@@ -390,7 +386,7 @@ int main()
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new MeshMaterials();
+	Application* app = new Shading();
 
     app->Start();
     app->Run();

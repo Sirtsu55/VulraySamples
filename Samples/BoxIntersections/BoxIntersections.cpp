@@ -1,11 +1,11 @@
 #include "Vulray/Vulray.h"
 #include "Common.h"
+#include "ShaderCompiler.h"
 #include "Application.h"
 #include "FileRead.h"
-#include "ShaderCompiler.h"
 
 
-class DynamicBLAS : public Application
+class BoxIntersections : public Application
 {
 public:
     virtual void Start() override;
@@ -17,14 +17,11 @@ public:
     void CreateRTPipeline();
     void UpdateDescriptorSet();
 
-    void UpdateBLAS(vk::CommandBuffer cmd);
-
 public:
 
     ShaderCompiler mShaderCompiler;
 
-    vr::AllocatedBuffer mVertexBuffer;
-    vr::AllocatedBuffer mIndexBuffer;
+    vr::AllocatedBuffer mAABBBuffer;
 
     vr::ShaderBindingTable mSBT;    
 	vr::SBTBuffer mSBTBuffer;      
@@ -37,71 +34,63 @@ public:
     vk::PipelineLayout mPipelineLayout = nullptr;
 
     vr::BLASHandle mBLASHandle;
-
-    // Save the build info for the BLAS so we can update it later
-    vr::BLASBuildInfo mBLASBuildInfo;
-
-    vr::AllocatedBuffer mUpdateScratchBuffer;
-
     vr::TLASHandle mTLASHandle;
 
 
 };
 
-void DynamicBLAS::Start()
+void BoxIntersections::Start()
 {
     CreateBaseResources();
     
+    CreateRTPipeline();
+
     CreateAS();
     
-    CreateRTPipeline();
     UpdateDescriptorSet();
 
 }
 
-void DynamicBLAS::CreateAS()
+void BoxIntersections::CreateAS()
 {
-    // vertex and index data for the triangle
 
-    float vertices[] = {
-        1.0f, -1.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f,
-        0.0f,  1.0f, 0.0f
-    };
-    uint32_t indices[] = { 0, 1, 2 };
+    uint32_t boxSize = sizeof(vk::AabbPositionsKHR); // 2 vec3s for the min and max of the AABB
 
-    mVertexBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 3 * 3,
+    // [POI]
+    // AABB for a box
+    auto box = vk::AabbPositionsKHR(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f);
+
+    mAABBBuffer = mVRDev->CreateBuffer(
+        boxSize,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
 
-    mIndexBuffer = mVRDev->CreateBuffer(
-        sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
-
-
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
-    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); 
-    
+    // copy the AABB to the buffer
+    mVRDev->UpdateBuffer(mAABBBuffer, &box, boxSize);
 
     vr::BLASCreateInfo blasCreateInfo = {};
-    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
     
-    vr::GeometryData geomData = {};
 
-    geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
-    geomData.Stride = sizeof(float) * 3;
-    geomData.IndexFormat = vk::IndexType::eUint32;
-    geomData.PrimitiveCount = 1;
-    geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress;
-    geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress;
+    // [POI]
+    vr::GeometryData geomData = {};
+    // Set the geometry type to AABBs, default is Triangles
+    geomData.Type = vk::GeometryTypeKHR::eAabbs;
+    geomData.PrimitiveCount = 1; // 1 box
+    geomData.Stride = sizeof(float) * 6; // vec3 min, vec3 max
+    // All other data is not used for AABBs, like index and vertex buffers, and index/vertex format
+
+
+    // Set the AABB buffer as the data source
+    geomData.DataAddresses.AABBDevAddress = mAABBBuffer.DevAddress;
 
     blasCreateInfo.Geometries.push_back(geomData);
 
-   std::tie(mBLASHandle, mBLASBuildInfo) = mVRDev->CreateBLAS(blasCreateInfo); 
+   auto [blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(mBLASBuildInfo);
+    mBLASHandle = blasHandle;
+
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(blasBuildInfo);
 
     // create a TLAS
     vr::TLASCreateInfo tlasCreateInfo = {};
@@ -139,7 +128,7 @@ void DynamicBLAS::CreateAS()
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    std::vector<vr::BLASBuildInfo> buildInfos = { mBLASBuildInfo }; 
+    std::vector<vr::BLASBuildInfo> buildInfos = { blasBuildInfo }; 
     
     mVRDev->BuildBLAS(buildInfos, buildCmd); 
 
@@ -167,61 +156,7 @@ void DynamicBLAS::CreateAS()
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 }
 
-void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
-{
-    // modify the triangle
-    float size = sinf(glfwGetTime()) / 2.0f + 0.5f;
-    float vertices[] = {
-        size, -size, 0.0f,
-        -size, -size, 0.0f,
-        0.0f, size, 0.0f
-    };
-
-    // [POI] Additional Info
-    // Vulkan requires the whole buffer with same size and the same number of primitives as the source BLAS, so if you want to update only one primitive, 
-    // you still have to give vulkan the whole buffer, not parts that you want to update
-
-    //Update the vertex buffer
-    mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
-
-    // [POI] set the BLAS to update
-    vr::BLASUpdateInfo updateInfo = {};
-
-    updateInfo.SourceBLAS = &mBLASHandle;
-    updateInfo.SourceBuildInfo = mBLASBuildInfo;
-
-    // [POI] This vector has to be the same size as the vector of geometries in the BLASCreateInfo if using new device addresses / buffers
-    // if the vector is empty, then the device addresses used to build the source BLAS will be used
-    // this line can be removed, but to demonstrate how to use it, we will set the device addresses to the new ones, although they remain unchanged
-    updateInfo.NewGeometryAddresses.push_back(vr::GeometryDeviceAddress(mVertexBuffer.DevAddress, mIndexBuffer.DevAddress));
-
-
-
-    auto buildInfo = mVRDev->UpdateBLAS(updateInfo);
-
-    // [POI] bind the scratch buffer to the build info
-    // it's a new build info, so we need to bind the scratch buffer to it, since it doesn't know about the scratch buffer
-    mVRDev->BindScratchBufferToBuildInfo(mUpdateScratchBuffer.DevAddress, buildInfo);
-
-    // [POI] if new scratch size is bigger than the old one, then we need to allocate a new scratch buffer
-    if(buildInfo.BuildSizes.updateScratchSize > mUpdateScratchBuffer.Size)
-    {
-        if(mUpdateScratchBuffer.Size > 0) // if the old scratch buffer is not empty, destroy it
-            mVRDev->DestroyBuffer(mUpdateScratchBuffer);
-
-        // [POI]
-        // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo 
-        // Also we don't need to explicitly bind the scratch buffer to the build info, because this function does that internally for us
-        mUpdateScratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo, vk::BuildAccelerationStructureModeKHR::eUpdate);
-    }
-
-
-    mVRDev->BuildBLAS({ buildInfo }, cmd);
-    mVRDev->AddAccelerationBuildBarrier(cmd);
-}
-
-
-void DynamicBLAS::CreateRTPipeline()
+void BoxIntersections::CreateRTPipeline()
 {
 
     mResourceBindings = {
@@ -238,7 +173,9 @@ void DynamicBLAS::CreateRTPipeline()
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    // [POI]
+    // Have a look at the shader file to see how the intersection shader is set up
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/CustomIntersection/RaytracedBoxes.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     mSBT.RayGenShader = shaderModule;
@@ -249,6 +186,12 @@ void DynamicBLAS::CreateRTPipeline()
     mSBT.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
+    // [POI]
+    // Set the intersection shader to the same hitgroup as the closest hit shader
+    // The intersection shader will call the closest hit shader in the same hitgroup if it reports a hit
+    hitGroup.IntersectionShader = shaderModule;
+    hitGroup.IntersectionShader.EntryPoint = "isect";
+    
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
     mSBT.HitGroups.push_back(hitGroup);
@@ -265,7 +208,7 @@ void DynamicBLAS::CreateRTPipeline()
 }
 
 
-void DynamicBLAS::UpdateDescriptorSet()
+void BoxIntersections::UpdateDescriptorSet()
 {
 
     mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
@@ -273,11 +216,9 @@ void DynamicBLAS::UpdateDescriptorSet()
     mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);    
 }
 
-void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
+void BoxIntersections::Update(vk::CommandBuffer renderCmd)
 {
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
-    UpdateBLAS(renderCmd);
 
     mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
@@ -306,11 +247,10 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 }
 
 
-void DynamicBLAS::Stop()
+void BoxIntersections::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
-    mVRDev->DestroyBuffer(mUpdateScratchBuffer);
 
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
@@ -323,8 +263,8 @@ void DynamicBLAS::Stop()
     mDevice.destroyDescriptorSetLayout(mResourceDescriptorLayout);
     mVRDev->DestroyBuffer(mResourceDescBuffer.Buffer);
 
-    mVRDev->DestroyBuffer(mVertexBuffer);
-    mVRDev->DestroyBuffer(mIndexBuffer);
+    mVRDev->DestroyBuffer(mAABBBuffer);
+
     mVRDev->DestroyBLAS(mBLASHandle);
     mVRDev->DestroyTLAS(mTLASHandle);
 }
@@ -335,7 +275,7 @@ int main()
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new DynamicBLAS();
+	Application* app = new BoxIntersections();
 
     app->Start();
     app->Run();

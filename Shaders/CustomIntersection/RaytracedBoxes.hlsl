@@ -4,7 +4,7 @@
 { 
 	float4x4 viewInverse;
 	float4x4 projInverse;
-	float4 otherInfo; // time is in x
+	float4 otherInfo;
 };
 [[vk::binding(2, 0)]] RWTexture2D<float4> image;
 
@@ -37,14 +37,33 @@ void rgen()
 	image[int2(LaunchID.xy)] = float4(payload.hitValue, 0.0);
 }
 
+// Custom hit attributes used to pass data from intersection shader to closest hit shader
+// eg. Triangles have barycentric coordinates (a, b, c) as hit attributes (built in to Vulkan/DXR)
+struct BoxHitAttributes
+{
+	float2 hitValue;
+};
 
+// Intersection shader for a box, This can be used for any geometry (boxes, spheres, cylinders, etc.), but it's not very efficient 
+// due to the lack of hardware acceleration
+[shader("intersection")]
+void isect()
+{
+	BoxHitAttributes attribs;
+	attribs.hitValue = float2(1.0, 1.0); // fill in the hit attributes, with whatever you want to pass to the closest hit shader
+
+	float tHit = RayTCurrent(); // Get the current t value of the ray, when it hit the geometry
+
+	// Report the hit: 1. t value, 2. hit kind (User defined unsigned int 0 - 127), and the custom hit attributes
+    ReportHit(tHit, 0, attribs); 
+}
 
 
 [shader("closesthit")]
-void chit(inout Payload p, in float2 attribs)
+void chit(inout Payload p, in BoxHitAttributes attribs)
 {
-  const float3 barycentricCoords = float3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-  p.hitValue = barycentricCoords;
+	// shade the pixel with the hit attributes, we got from the intersection shader
+  	p.hitValue = float3(attribs.hitValue, 0.0);
 }
 
 

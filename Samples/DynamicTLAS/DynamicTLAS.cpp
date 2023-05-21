@@ -240,7 +240,7 @@ void DynamicTLAS::CreateRTPipeline()
 
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
-        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
+        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
     };
 
@@ -252,22 +252,19 @@ void DynamicTLAS::CreateRTPipeline()
 
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
     mSBT.RayGenShader.EntryPoint = "rgen"; 
 
 
     mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
     mSBT.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    hitGroup.ClosestHitShader.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     mSBT.HitGroups.push_back(hitGroup);
     
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
@@ -306,40 +303,10 @@ void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
+    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
-    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
-        vk::ImageLayout::eGeneral,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
-    renderCmd.blitImage(
-        mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
-        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) },
-            vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
-        vk::Filter::eNearest);
-    
-    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageLayout::eGeneral,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
-        vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageLayout::ePresentSrcKHR,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
+    // Helper function in Application Class to blit the image to the swapchain image
+    BlitImage(renderCmd);
 
     renderCmd.end();
 

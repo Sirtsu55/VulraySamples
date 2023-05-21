@@ -9,6 +9,8 @@ public:
 	Application();
 	virtual ~Application();
 
+	void BlitImage(vk::CommandBuffer renderCmd);
+
 	void Run();
 
 	//Functions to be overriden by the samples
@@ -28,6 +30,10 @@ public:
 
 	void UpdateCamera();
 
+private:
+	void HandleResize();
+
+
 protected:
 
 	GLFWwindow* mWindow = nullptr;
@@ -37,16 +43,23 @@ protected:
 	vk::PhysicalDevice mPhysicalDevice = nullptr;
 	vr::CommandQueues mQueues;
 
+
 	vk::CommandPool mGraphicsPool;
 
 	vr::AllocatedImage mOutputImageBuffer;
     vr::AccessibleImage mOutputImage;
 
+	vr::SwapchainBuilder mSwapchainBuilder;
 	vr::SwapchainStructs mSwapchainStructs;
+	vk::SwapchainKHR mOldSwapchain = nullptr;
+	
 	uint32_t mMaxFramesInFlight = 0;
 
-	uint32_t mWidth = 1280;
-	uint32_t mHeight = 720;
+	uint32_t mWindowWidth = 1280;
+	uint32_t mWindowHeight = 720;
+
+	uint32_t mRenderWidth = 1280;
+	uint32_t mRenderHeight = 720;
 
 	uint32_t mCurrentSwapchainImage = 0;
 
@@ -60,7 +73,7 @@ protected:
     uint32_t mRTRenderCmdIndex = 0;
 
 
-	vr::AllocatedBuffer mCameraUniformBuffer = {};
+	vr::AllocatedBuffer mUniformBuffer = {};
 
 	Camera mCamera;
 
@@ -68,6 +81,9 @@ protected:
 	glm::dvec2 mMouseDelta = { 0.0f, 0.0f };
 
 	float DeltaTime = 0.0f;
+
+	uint64_t mFrameCount = 0;
+	uint32_t mPassiveFrameCount = 0;
 
 	
 	SimpleTimer mFrameTimer;

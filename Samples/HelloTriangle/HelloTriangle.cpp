@@ -205,7 +205,7 @@ void HelloTriangle::CreateRTPipeline()
     // we can just reassign the vr::DescriptorItem::pItems with new items and update the descriptor set
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
-        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mCameraUniformBuffer),
+        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 10, &mOutputImage, 1)
     };
 
@@ -220,16 +220,14 @@ void HelloTriangle::CreateRTPipeline()
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
     // Shader compiler class from from Base/ will perform HLSL -> SPIR-V translation.
-    // We put eRaygenKHR as stage, but it has to be one of the ray tracing stages, because DXC compiler will use 
-    // lib_6_x to compile any of the ray tracing stages eg. eRaygenKHR, eMissKHR, eClosestHitKHR, eAnyHitKHR, eIntersectionKHR -> lib_6_x
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile(vk::ShaderStageFlagBits::eRaygenKHR, "Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    // DXC compiler will use lib_6_5 to compile any of the ray tracing stages eg. eRaygenKHR, eMissKHR, eClosestHitKHR, eAnyHitKHR, eIntersectionKHR
+    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
     // since HLSL allows multiple entry points in a single shader, we have all of the ray tracing stages in one shader
     // if compiling from glsl we would have to create a separate shader module for each stage
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
     // add the shader to the shader binding table which stores all the shaders for the pipeline
     mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.Stage = vk::ShaderStageFlagBits::eRaygenKHR;
     // entry point for the ray generation shader, if there are multiple entry points in the shader.
     // In this case we are using one shader module with all the required entry points, 
     // but by default it is "main" because most GLSL compilers use "main" as the default entry point
@@ -237,7 +235,6 @@ void HelloTriangle::CreateRTPipeline()
 
 
     mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().Stage = vk::ShaderStageFlagBits::eMissKHR;
     mSBT.MissShaders.back().EntryPoint = "miss";
 
     // [POI]
@@ -245,7 +242,6 @@ void HelloTriangle::CreateRTPipeline()
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    hitGroup.ClosestHitShader.Stage = vk::ShaderStageFlagBits::eClosestHitKHR;
     mSBT.HitGroups.push_back(hitGroup);
     
     // create the ray tracing pipeline
@@ -311,7 +307,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 
     // [POI]
     // RAYTRACING INITIATING
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
+    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
 
     //transition the swapchain image to transfer dst optimal
     mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
@@ -333,9 +329,9 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) },
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWindowWidth, mWindowHeight, 1) }),
         vk::Filter::eNearest);
     
     //transition the output image to general
