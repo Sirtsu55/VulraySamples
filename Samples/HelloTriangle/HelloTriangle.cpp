@@ -307,7 +307,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 
     // [POI]
     // RAYTRACING INITIATING
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
+    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
 
     //transition the swapchain image to transfer dst optimal
     mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
@@ -329,9 +329,9 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
         mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mOutputImageBuffer.Width, mOutputImageBuffer.Height, 1) },
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWindowWidth, mWindowHeight, 1) }),
         vk::Filter::eNearest);
     
     //transition the output image to general

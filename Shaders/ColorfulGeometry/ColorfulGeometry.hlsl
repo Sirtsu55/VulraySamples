@@ -1,7 +1,7 @@
 
 // includes are relative to the executable directory
 #include "Shaders/Common/Material.hlsl"
-#include "Shaders/Common/Camera.hlsl"
+#include "Shaders/Common/Ray.hlsl"
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -9,7 +9,7 @@
 { 
 	float4x4 viewInverse;
 	float4x4 projInverse;
-	float4 time; // time is in x
+	float4 otherInfo; // time is in x
 };
 [[vk::binding(2, 0)]] RWTexture2D<float4> image;
 [[vk::binding(3, 0)]] RWStructuredBuffer<GPUMaterial> materials;

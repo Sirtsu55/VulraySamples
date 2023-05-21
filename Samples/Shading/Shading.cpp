@@ -23,6 +23,8 @@ public:
     void CreateRTPipeline();
     void UpdateDescriptorSet();
 
+    void CreateAccumulationImage();
+
 public:
     MeshLoader mMeshLoader;
     
@@ -38,6 +40,9 @@ public:
 
 
     vr::AllocatedBuffer mMaterialBuffer;
+    
+    vr::AllocatedImage mAccumulationImageBuffer;
+    vr::AccessibleImage mAccumulationImage;
 
     vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
 	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
@@ -55,6 +60,7 @@ void Shading::Start()
 {
     //defined in the base application class, creates an output image to render to and a camera uniform buffer
     CreateBaseResources();
+    CreateAccumulationImage();
     
     CreateAS();
     
@@ -227,16 +233,43 @@ void Shading::CreateAS()
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 }
 
+void Shading::CreateAccumulationImage()
+{
+    auto imgInfo = vk::ImageCreateInfo()
+        .setImageType(vk::ImageType::e2D)
+        .setFormat(vk::Format::eR32G32B32A32Sfloat)
+        .setExtent(vk::Extent3D(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height, 1))
+        .setMipLevels(1)
+        .setArrayLayers(1)
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setTiling(vk::ImageTiling::eOptimal)
+        .setUsage(vk::ImageUsageFlagBits::eStorage)
+        .setSharingMode(vk::SharingMode::eExclusive)
+        .setInitialLayout(vk::ImageLayout::eUndefined);
+
+    mAccumulationImageBuffer = mVRDev->CreateImage(imgInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
+
+    auto viewInfo = vk::ImageViewCreateInfo()
+        .setImage(mAccumulationImageBuffer.Image)
+        .setViewType(vk::ImageViewType::e2D)
+        .setFormat(vk::Format::eR32G32B32A32Sfloat)
+        .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+    
+    mAccumulationImage.View = mDevice.createImageView(viewInfo);
+    mAccumulationImage.Layout = vk::ImageLayout::eGeneral;
+    // Create the accumulation image
+}
 
 void Shading::CreateRTPipeline()
 {
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
-        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR|vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mUniformBuffer),
+        vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
         vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),
         vr::DescriptorItem(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mVertexBuffer),
-        vr::DescriptorItem(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mIndexBuffer)
+        vr::DescriptorItem(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mIndexBuffer),
+        vr::DescriptorItem(6, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mAccumulationImage),
     };
 
 
@@ -271,7 +304,6 @@ void Shading::CreateRTPipeline()
     // create a descriptor buffer for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
-
 }
 
 
@@ -289,7 +321,7 @@ void Shading::Update(vk::CommandBuffer renderCmd)
     mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
 
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
-
+    
     mVRDev->TransitionImageLayout(
         mOutputImageBuffer.Image,
         vk::ImageLayout::eUndefined,
@@ -299,40 +331,12 @@ void Shading::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
+    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
 
-    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
-        vk::ImageLayout::eGeneral,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
+    BlitImage(renderCmd);
 
-    renderCmd.blitImage(
-        mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
-        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mOutputImageBuffer.Width, mOutputImageBuffer.Height, 1) },
-            vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
-        vk::Filter::eNearest);
-    
-    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageLayout::eGeneral,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
-        vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageLayout::ePresentSrcKHR,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
 
     renderCmd.end();
 
@@ -361,6 +365,9 @@ void Shading::Stop()
 
     mDevice.destroyDescriptorSetLayout(mResourceDescriptorLayout);
     mVRDev->DestroyBuffer(mResourceDescBuffer.Buffer);
+
+    mDevice.destroyImageView(mAccumulationImage.View);
+    mVRDev->DestroyImage(mAccumulationImageBuffer);
 
     mVRDev->DestroyBuffer(mVertexBuffer);
     mVRDev->DestroyBuffer(mIndexBuffer);

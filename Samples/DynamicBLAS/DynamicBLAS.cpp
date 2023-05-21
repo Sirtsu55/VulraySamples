@@ -289,40 +289,10 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWidth, mHeight);
+    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
-    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
-        vk::ImageLayout::eGeneral,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
-    renderCmd.blitImage(
-        mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
-        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mOutputImageBuffer.Width, mOutputImageBuffer.Height, 1) },
-            vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
-            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWidth, mHeight, 1) }),
-        vk::Filter::eNearest);
-    
-    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageLayout::eGeneral,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
-        vk::ImageLayout::eTransferDstOptimal,
-        vk::ImageLayout::ePresentSrcKHR,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
+    // Helper function in Application Class to blit the image to the swapchain image
+    BlitImage(renderCmd);
 
     renderCmd.end();
 

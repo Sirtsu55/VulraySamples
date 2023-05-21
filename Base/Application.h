@@ -9,6 +9,8 @@ public:
 	Application();
 	virtual ~Application();
 
+	void BlitImage(vk::CommandBuffer renderCmd);
+
 	void Run();
 
 	//Functions to be overriden by the samples
@@ -53,8 +55,11 @@ protected:
 	
 	uint32_t mMaxFramesInFlight = 0;
 
-	uint32_t mWidth = 1280;
-	uint32_t mHeight = 720;
+	uint32_t mWindowWidth = 1280;
+	uint32_t mWindowHeight = 720;
+
+	uint32_t mRenderWidth = 1280;
+	uint32_t mRenderHeight = 720;
 
 	uint32_t mCurrentSwapchainImage = 0;
 
@@ -76,6 +81,9 @@ protected:
 	glm::dvec2 mMouseDelta = { 0.0f, 0.0f };
 
 	float DeltaTime = 0.0f;
+
+	uint64_t mFrameCount = 0;
+	uint32_t mPassiveFrameCount = 0;
 
 	
 	SimpleTimer mFrameTimer;

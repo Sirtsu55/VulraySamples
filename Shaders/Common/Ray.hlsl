@@ -12,3 +12,8 @@ RayDesc ConstructRay(in float4x4 viewInverse, in float4x4 projInverse, in float2
 	rayDesc.TMax = 10000.0;
     return rayDesc;
 }
+
+float3 GetIntersectionPosition()
+{
+	return WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+}

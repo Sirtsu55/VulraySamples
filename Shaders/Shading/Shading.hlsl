@@ -1,9 +1,10 @@
 #include "Shaders/Common/Material.hlsl"
-#include "Shaders/Common/Functions.hlsl"
-#include "Shaders/Common/Camera.hlsl"
+#include "Shaders/Common/Random.hlsl"
+#include "Shaders/Common/Sampling.hlsl"
+#include "Shaders/Common/Ray.hlsl"
 
 #define PATH_SAMPLES 4
-#define RECURSION_LENGTH 2
+#define RECURSION_LENGTH 4
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -11,12 +12,13 @@
 { 
 	float4x4 viewInverse;	
 	float4x4 projInverse;
-	float4 time; // time is in x, other values are unused / padding
+	float4 otherInfo; // time is in x, other values are unused / padding
 };
 [[vk::binding(2, 0)]] RWTexture2D<float4> image;
-[[vk::binding(3, 0)]] RWStructuredBuffer<GPUMaterial> materials;
+[[vk::binding(3, 0)]] StructuredBuffer<GPUMaterial> materials;
 [[vk::binding(4, 0)]] StructuredBuffer<Vertex> VertexBuffer;
 [[vk::binding(5, 0)]] StructuredBuffer<uint> IndexBuffer;
+[[vk::binding(6, 0)]] RWTexture2D<float4> accumulationImage;
 
 struct HitInfo
 {
@@ -43,91 +45,113 @@ void rgen()
 	uint3 LaunchID = DispatchRaysIndex();
 	uint3 LaunchSize = DispatchRaysDimensions();
 
-	const float2 pixelCenter = float2(LaunchID.xy) + float2(0.5, 0.5);
-	const float2 uv = pixelCenter / float2(LaunchSize.xy);
 
 	// Construct a ray from the camera for the first ray
 	// For later recursive rays, the ray direction will be set in the closest hit shader
-	RayDesc ray = ConstructRay(viewInverse, projInverse, uv);
 
 	Payload p;
+	p.Info.Attenuation = 1.0;
 
-	uint RecursionDepth = 0;
-	float4 ColorAttenuation = float4(0.0, 0.0, 0.0, 1.0);
-	while(RecursionDepth < RECURSION_LENGTH)
+
+	uint TotalRaysShot = 0;
+	uint PathSamples = 0;
+	float3 Color = float3(0, 0, 0);
+
+	float time = otherInfo.x;
+	uint frameCount = asuint(otherInfo.y);
+
+	uint2 randSeed = uint2(LaunchID.xy * time);
+
+	while(PathSamples < PATH_SAMPLES)
 	{
-		RecursionDepth++;
+		float2 rand = float2(NextRandomFloat(randSeed.x), NextRandomFloat(randSeed.y));
+		const float2 pixelCenter = float2(LaunchID.xy) + rand;
+		const float2 uv = pixelCenter / float2(LaunchSize.xy);
+		RayDesc ray = ConstructRay(viewInverse, projInverse, uv);
 
-		TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, ray, p);
-		ray.Origin = p.RayInfo.Origin;
-		ray.Direction = p.RayInfo.Direction;
+		uint RecursionDepth = 0;
+		while(RecursionDepth < RECURSION_LENGTH)
+		{
+			RecursionDepth++;
 
-		ColorAttenuation.xyz += p.Info.Color * ColorAttenuation.w;
-		ColorAttenuation.w *= p.Info.Attenuation;
-		if(p.Info.TerminateRay)
-			break;
+			TraceRay(rs, RAY_FLAG_FORCE_OPAQUE, 0xff, 0, 0, 0, ray, p);
+			ray.Origin = p.RayInfo.Origin;
+			ray.Direction = p.RayInfo.Direction;
+
+			Color += p.Info.Color;
+
+			if(p.Info.TerminateRay)
+				break;
+		}
+		TotalRaysShot += RecursionDepth;
+		PathSamples++;
 	}
 	
-	float3 finalColor = (ColorAttenuation.xyz /* * p.Info.LightContribution*/ )  / float(RecursionDepth);
-	finalColor = pow(finalColor, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
+	float3 Radiance = (Color * p.Info.LightContribution) / float(TotalRaysShot);
 
-	image[int2(LaunchID.xy)] = float4(finalColor, 0.0);
+	//Apply accumulation
+	float3 Accumulated = accumulationImage[int2(LaunchID.xy)].xyz;
 
+	float3 PixelColor = (Radiance + Accumulated) / float(frameCount + 1);
+
+	PixelColor = pow(PixelColor, float3(1.0/2.2, 1.0/2.2, 1.0/2.2)); // gamma correction
+
+	image[int2(LaunchID.xy)] = float4(PixelColor, 0.0);
+
+	if(frameCount == 0)
+		accumulationImage[int2(LaunchID.xy)] = float4(Radiance, 0.0);
+	else
+		accumulationImage[int2(LaunchID.xy)] = float4(Radiance + Accumulated, 0.0);
 
 }
 
-float3 GetVertex(in uint vertBufferStart, in uint indexBufferStart, in uint index)
-{
-    uint idx = IndexBuffer[indexBufferStart + index];
-	return VertexBuffer[vertBufferStart + idx].Position.xyz;
-}
-
-float3 GetNormal(in uint vertBufferStart, in uint indexBufferStart, in uint index)
-{
-	uint idx = IndexBuffer[indexBufferStart + index];
-	return VertexBuffer[vertBufferStart + idx].Normal.xyz;
-}
 
 [shader("closesthit")]
 void chit(inout Payload p, in float2 barycentrics)
 {
-	float3 v = WorldRayDirection();
 
 	GPUMaterial mat = materials[InstanceID() + GeometryIndex()];
 
 	float3 normals[3] = {
-		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 0),
-		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 1),
-		GetNormal(mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 2)
+		GetNormal(VertexBuffer, IndexBuffer, mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 0),
+		GetNormal(VertexBuffer, IndexBuffer, mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 1),
+		GetNormal(VertexBuffer, IndexBuffer, mat.VertBufferStart, mat.IndexBufferStart, PrimitiveIndex() * 3 + 2)
 	};
+
+	float3 v = WorldRayDirection();
 
 	float3 normal = InterpolateTriangle(normals, barycentrics);
 	normal = faceforward(normal, v, normal); // make sure normal is facing the camera
 
-
-	uint seed = asint(time.x) * asint(v.x) * asint(v.y) * asint(v.z);
-
+	float time = otherInfo.x;
+	uint seed = asint(time) * asint(v.x) * asint(v.y) * asint(v.z);
 	float u1 = NextRandomFloat(seed);
 	float u2 = NextRandomFloat(seed);
+
+	float3 newDir = SampleCosineHemisphere(normal, u1, u2);
+
+	float cosTheta = dot(newDir, normal);
+
+	float pdf = CosineHemispherePDF(cosTheta);
 	
-	float3 m = GGXRandomDirection(normal, mat.Roughness, u1, u2); // also called half vector
+	float RayContribution = p.Info.Attenuation * pdf;
+
+	float3 color = (mat.BaseColor * RayContribution);
 
 
-	float3 wi = reflect(v, m); // reflect the view vector around the half vector to get the incoming light direction
+	// Payload Update
 
-
-
-	float D = GGXDistribution(normal, m, mat.Roughness);
-
-
-	p.RayInfo.Direction = wi;
-	p.RayInfo.Origin = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-
-	p.Info.LightContribution = any(mat.Emissive) ? mat.Emissive : float3(0.0, 0.0, 0.0); // if emissive is set, then this is a light source
-	p.Info.TerminateRay =  dot(wi, normal) < 0.0 ? true : any(mat.Emissive); 
-	p.Info.Color = mat.BaseColor;
-	p.Info.Attenuation = 1.0;
-
+	// if the material is emissive, terminate the ray and return the emissive color
+	bool isLight = any(mat.Emissive);
+	p.Info.LightContribution = isLight ? mat.Emissive * 100: float3(0.0, 0.0, 0.0);
+	// terminate the ray if the material is emissive
+	p.Info.TerminateRay = isLight;
+	// set the new color and attenuation for the next ray
+	p.Info.Color = color;
+	p.Info.Attenuation *= (1.0 - RayContribution);
+	// set the new ray direction and origin
+	p.RayInfo.Direction = newDir;
+	p.RayInfo.Origin = GetIntersectionPosition();
 }
 
 

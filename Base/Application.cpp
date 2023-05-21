@@ -16,7 +16,7 @@ Application::Application()
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); //Sets the client API to GLFW_NO_API, which means that the application will not create an OpenGL context
 
-    mWindow = glfwCreateWindow(mWidth, mHeight, SAMPLE_NAME, nullptr, nullptr); //Creates a window
+    mWindow = glfwCreateWindow(mWindowWidth, mWindowHeight, SAMPLE_NAME, nullptr, nullptr); //Creates a window
 
     // specify debug callback by passing a pointer to the function if you want to use it
     // vr::LogCallback = logcback;
@@ -37,8 +37,16 @@ Application::Application()
     {
         builder.InstanceExtensions.push_back(extensions[i]);
     }
+
+#ifdef NDEBUG
+    builder.EnableDebug = false;
+#else
+    builder.EnableDebug = true;
+#endif
+
     // Create the instance
     mInstance = builder.CreateInstance();
+
 
 
     // user can also add extra extensions to the device if they want to use them
@@ -69,8 +77,8 @@ Application::Application()
     // This code creates a swapchain with a particular format and dimensions.
 
     mSwapchainBuilder = vr::SwapchainBuilder(mDevice, mPhysicalDevice, mSurface, mQueues.GraphicsIndex, mQueues.PresentIndex);
-    mSwapchainBuilder.Height = mWidth;
-    mSwapchainBuilder.Width = mHeight;
+    mSwapchainBuilder.Height = mWindowWidth;
+    mSwapchainBuilder.Width = mWindowHeight;
 	mSwapchainBuilder.BackBufferCount = 2;
     mSwapchainBuilder.ImageUsage = vk::ImageUsageFlagBits::eTransferDst;
 	mSwapchainBuilder.DesiredFormat = vk::Format::eB8G8R8A8Unorm; 
@@ -125,6 +133,10 @@ void Application::Stop()
 
 void Application::BeginFrame()
 {
+
+    mPassiveFrameCount++;
+    mFrameCount++;
+
     DeltaTime = mFrameTimer.Endd();
     mFrameTimer.Start();
     //Acquire the next image
@@ -201,7 +213,7 @@ void Application::CreateBaseResources()
     // Create an image to render to
     auto imageCreateInfo = vk::ImageCreateInfo()
         .setImageType(vk::ImageType::e2D)
-        .setFormat(vk::Format::eR8G8B8A8Unorm)
+        .setFormat(vk::Format::eR16G16B16A16Sfloat)
         .setExtent(vk::Extent3D(mSwapchainStructs.SwapchainExtent, 1))
         .setMipLevels(1)
         .setArrayLayers(1)
@@ -218,7 +230,7 @@ void Application::CreateBaseResources()
     auto viewCreateInfo = vk::ImageViewCreateInfo()
         .setImage(mOutputImageBuffer.Image)
         .setViewType(vk::ImageViewType::e2D)
-        .setFormat(vk::Format::eR8G8B8A8Unorm)
+        .setFormat(vk::Format::eR16G16B16A16Sfloat)
         .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
     mOutputImage.View = mDevice.createImageView(viewCreateInfo);
@@ -246,34 +258,41 @@ void Application::UpdateCamera()
     if(glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         if(delta.x || delta.y)
+        {
             mCamera.Rotate(delta.y * DeltaTime, delta.x * DeltaTime, 0);
+            mPassiveFrameCount = 0;
+        }
     }
     if (glfwGetKey(mWindow, GLFW_KEY_Q) == GLFW_PRESS)
     {
         mCamera.Rotate(0, 0, DeltaTime);
+        mPassiveFrameCount = 0;
     }
     if (glfwGetKey(mWindow, GLFW_KEY_E) == GLFW_PRESS)
     {
         mCamera.Rotate(0, 0, -DeltaTime);
+        mPassiveFrameCount = 0;
     }
     if(glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS)
     {
         mCamera.MoveForward(DeltaTime);
+        mPassiveFrameCount = 0;
     }
     if(glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS)
     {
         mCamera.MoveForward(-DeltaTime);
+        mPassiveFrameCount = 0;
     }
     if(glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS)
     {
         mCamera.MoveRight(DeltaTime);
+        mPassiveFrameCount = 0;
     }
     if(glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS)
     {
         mCamera.MoveRight(-DeltaTime);
+        mPassiveFrameCount = 0;
     }
-
-
 
     glm::mat4 view = mCamera.GetViewMatrix();
 
@@ -285,9 +304,13 @@ void Application::UpdateCamera()
 
     float time = glfwGetTime();
 
+    uint32_t uniformExtraInfo[4];
+    uniformExtraInfo[0] = *(uint32_t*)&time; // type punning
+    uniformExtraInfo[1] = mPassiveFrameCount;
+
     char* mapped = (char*)mVRDev->MapBuffer(mUniformBuffer);
     memcpy(mapped, mats, sizeof(glm::mat4) * 2);
-    memcpy(mapped + sizeof(glm::mat4) * 2, &time, sizeof(float));
+    memcpy(mapped + sizeof(glm::mat4) * 2, uniformExtraInfo, sizeof(uint32_t) * 4);
     mVRDev->UnmapBuffer(mUniformBuffer);
 
 }
@@ -304,14 +327,54 @@ void Application::HandleResize()
     // get the new framebuffer size
     int width, height;
     glfwGetFramebufferSize(mWindow, &width, &height);
-    mWidth = width;
-    mHeight = height;
+    mWindowWidth = width;
+    mWindowHeight = height;
+    mRenderWidth = mWindowWidth > mOutputImageBuffer.Width ? mOutputImageBuffer.Width : mWindowWidth;
+    mRenderHeight = mWindowHeight > mOutputImageBuffer.Height ? mOutputImageBuffer.Height : mWindowHeight;
 
     // update the camera aspect ratio
-    mCamera.AspectRatio = (float)mOutputImageBuffer.Width / (float)mOutputImageBuffer.Height;
-    
+    mCamera.AspectRatio = (float)mRenderWidth/ (float)mRenderHeight;
+
+
+    mPassiveFrameCount = 0;
 }
 
+void Application::BlitImage(vk::CommandBuffer renderCmd)
+{
+    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    vk::ImageLayout::eUndefined,
+    vk::ImageLayout::eTransferDstOptimal,
+    vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+    renderCmd);
+
+    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
+        vk::ImageLayout::eGeneral,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+
+
+    renderCmd.blitImage(
+        mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
+        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
+            vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWindowWidth, mWindowHeight, 1) }),
+        vk::Filter::eNearest);
+    
+    mVRDev->TransitionImageLayout(mOutputImageBuffer.Image,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageLayout::eGeneral,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+
+    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::ePresentSrcKHR,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+}
 void Application::Run()
 {
     while (!glfwWindowShouldClose(mWindow))
@@ -321,6 +384,7 @@ void Application::Run()
         glfwPollEvents();
     }
 }
+
 
 Application::~Application()
 {

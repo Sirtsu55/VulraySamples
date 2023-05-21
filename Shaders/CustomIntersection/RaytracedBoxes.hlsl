@@ -4,7 +4,7 @@
 { 
 	float4x4 viewInverse;
 	float4x4 projInverse;
-	float4 time; // time is in x
+	float4 otherInfo;
 };
 [[vk::binding(2, 0)]] RWTexture2D<float4> image;
 
