@@ -212,7 +212,7 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
         // [POI]
         // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo 
         // Also we don't need to explicitly bind the scratch buffer to the build info, because this function does that internally for us
-        mUpdateScratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo, vk::BuildAccelerationStructureModeKHR::eUpdate);
+        mUpdateScratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo);
     }
 
 
