@@ -28,7 +28,6 @@ void GetOrthonormalBases(in float3 normal, out float3 T1, out float3 T2)
 {
     float3 T0 = float3(0, 0, 0);
 
-    // adapted code, works the same way and less branching
     T0 = abs(normal.x) < SQRT_OF_ONE_THIRD ? float3(1, 0, 0) : float3(0, 1, 0);
 
 	// Use not-normal direction to generate two perpendicular directions
@@ -37,23 +36,28 @@ void GetOrthonormalBases(in float3 normal, out float3 T1, out float3 T2)
 }
 //----------------------------------------------------------------------
 
+// Sample a hemisphere with cosine distribution
 float3 SampleCosineHemisphere(float3 normal, float u1, float u2) 
 {
-
+    // Sample Spherical coordinates
     float theta = acos(sqrt(u1));
     float phi = TWO_PI * u2;
 
+    // Get Orthonormal Bases
     float3 perpendicularDirection1;
     float3 perpendicularDirection2;
     GetOrthonormalBases(normal, perpendicularDirection1, perpendicularDirection2);
 
+    // Convert to Cartesian coordinates
     float3 cartesian = SphericalToCartesian(theta, phi);
 
+    // Transform the sample to the normal's coordinate system
     float3 sampleDir = cartesian.x * perpendicularDirection1 + cartesian.y * perpendicularDirection2 + cartesian.z * normal;
-
+    
 	return sampleDir;
 }
 
+// Returns the PDF for sampling a hemisphere with cosine distribution
 float CosineHemispherePDF(float cosTheta)
 {
     return cosTheta / PI;
