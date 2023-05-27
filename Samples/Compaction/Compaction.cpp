@@ -5,7 +5,7 @@
 #include "ShaderCompiler.h"
 
 
-class DynamicTLAS : public Application
+class Compaction : public Application
 {
 public:
     virtual void Start() override;
@@ -17,8 +17,11 @@ public:
     void CreateRTPipeline();
     void UpdateDescriptorSet();
 
+
+    void Compact(vk::CommandBuffer cmd);
+
+    // Update the TLAS when the BLAS changes due to compaction
     void UpdateTLAS();
-    void UpdateInstances();
 public:
 
     ShaderCompiler mShaderCompiler;
@@ -40,17 +43,19 @@ public:
     vr::BLASHandle mBLASHandle;
 
 
-    //[POI]
     vr::TLASHandle mTLASHandle;
-    vr::TLASBuildInfo mTLASBuildInfo; // save the build info so we can update the TLAS
-    std::vector<vk::AccelerationStructureInstanceKHR> mInstanceData; // Keep the instance data in the cpu
-    vr::AllocatedBuffer mInstanceBuffer; // for the TLAS
-    vr::AllocatedBuffer mScratchBuffer; // for the TLAS so we don't have to create a new one every frame and can reuse it
+    vr::TLASBuildInfo mTLASBuildInfo; 
+    vr::AllocatedBuffer mInstanceBuffer; 
+    vr::AllocatedBuffer mScratchBuffer;
 
-
+    //[POI] - Compaction
+    std::vector<vr::BLASHandle*> mBLASToCompact; // all the BLASes that need to be compacted
+    std::vector<vr::BLASHandle> mBLASToDestroy; // all the BLASes that need to be destroyed after compaction
+    vr::CompactionRequest mCompactionRequest;
+    bool Compacted = false;
 };
 
-void DynamicTLAS::Start()
+void Compaction::Start()
 {
     CreateBaseResources();
     
@@ -61,7 +66,7 @@ void DynamicTLAS::Start()
 
 }
 
-void DynamicTLAS::CreateAS()
+void Compaction::CreateAS()
 {
     // vertex and index data for the triangle
 
@@ -88,7 +93,7 @@ void DynamicTLAS::CreateAS()
     
 
     vr::BLASCreateInfo blasCreateInfo = {};
-    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+    blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
     
     vr::GeometryData geomData = {};
 
@@ -107,21 +112,32 @@ void DynamicTLAS::CreateAS()
 
     mBLASHandle = blasHandle;
     
-    // [POI]
-    // create a TLAS now, we will build / update it in the UpdateTLAS(...) function
-    // We could build it here, but to simplify the code we will build it in the UpdateTLAS(...) function
-    // The TLAS has to be valid before dispatching rays though, but our UpdateTLAS(...) function will be called before the first ray dispatch
     vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-    tlasCreateInfo.MaxInstanceCount = 5; // Max number of instances in the TLAS, when building the TLAS num of instances may be lower
+    tlasCreateInfo.MaxInstanceCount = 5; 
 
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->CreateTLAS(tlasCreateInfo);
 
-    // create a buffer for the instance data
-    mInstanceData = std::vector<vk::AccelerationStructureInstanceKHR>(5); // 5 instances
-    mInstanceBuffer = mVRDev->CreateInstanceBuffer(5); // 5 instances
+    mScratchBuffer = mVRDev->CreateScratchBufferTLAS(mTLASBuildInfo);
 
+    mInstanceBuffer = mVRDev->CreateInstanceBuffer(1);
 
+	//Specify the instance data
+    auto inst = vk::AccelerationStructureInstanceKHR()
+        .setInstanceCustomIndex(0)
+		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress)
+		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
+        .setMask(0xFF)
+        .setInstanceShaderBindingTableRecordOffset(0);
+
+    // set the transform matrix to identity
+    inst.transform = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f
+    };
+
+    mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
@@ -130,6 +146,10 @@ void DynamicTLAS::CreateAS()
     std::vector<vr::BLASBuildInfo> buildInfos = { buildInfo }; 
     
     mVRDev->BuildBLAS(buildInfos, buildCmd); 
+
+    mVRDev->AddAccelerationBuildBarrier(buildCmd);
+
+    mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, 1, buildCmd); 
 
     buildCmd.end();
 
@@ -146,96 +166,79 @@ void DynamicTLAS::CreateAS()
     mVRDev->DestroyBuffer(BLASscratchBuffer); 
 
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
+
+    // [POI] get a request for compaction
+
+    mBLASToCompact.push_back(&mBLASHandle); // add the BLAS to the list of BLASes to compact
+    mCompactionRequest = mVRDev->RequestCompaction(mBLASToCompact); // get the compaction request
 }
-
-void DynamicTLAS::UpdateInstances()
+// A function that updates the TLAS
+// Nearly same as DynamicTLAS sample, but with no comments
+void Compaction::UpdateTLAS()
 {
-    float x = 0.0f, z = 0.0f;
-    float time = glfwGetTime();
-
-    for(int i = 0; i < mInstanceData.size(); i++)
-    {
-        // cool animation for the instances
-        x = cosf(time + i) + i;
-        z = sinf(time + i) + i;
-
-        VkTransformMatrixKHR transform = { // 3x4 matrix
-            1.0f, 0.0f, 0.0f, x,
-            0.0f, 1.0f, 0.0f, 0.0,
-            0.0f, 0.0f, 1.0f, z
-        };
-
-        // copy the matrix data
-
-        mInstanceData[i] = vk::AccelerationStructureInstanceKHR()
-            .setTransform(transform)
-            .setInstanceCustomIndex(0)
-            .setMask(0xFF)
-            .setInstanceShaderBindingTableRecordOffset(0)
-            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
-            .setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress);
-    }
-
-    mVRDev->UpdateBuffer(mInstanceBuffer, mInstanceData.data(), sizeof(vk::AccelerationStructureInstanceKHR) * mInstanceData.size());
-
-}
-
-void DynamicTLAS::UpdateTLAS()
-{
-    UpdateInstances();
+    // [POI] Put the new BLAS into the TLAS
+    auto inst = vk::AccelerationStructureInstanceKHR()
+        .setInstanceCustomIndex(0)          
+		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress) // This remains the same, because we replaced the BLAS with a compacted version
+		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
+        .setMask(0xFF)
+        .setInstanceShaderBindingTableRecordOffset(0);
+    inst.transform = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f
+    };
+    mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool);
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
-    // [POI]
-    // Update the TLAS
-    // We have to update the TLAS every frame, because the instance data has changed
-    // We give the function the TLAS handle and the TLAS build info, and get new handles and build infos back
-    // there is a bool to specify if we want destruction of the old TLAS, we set it to true, because we don't need the old TLAS anymore
-    // we would have to keep it if we wanted to update the TLAS while the old one is still in use, and then after the frame finishes, we would have to destroy the old TLAS
-    // and update the descriptor set to point to the new TLAS.
-    // Keep in mind that the UpdateTLAS(...) creates a new TLAS, so it is not actually an update, but a rebuild, Vulray doesn't offer TLAS updates, but rebuilds
-    // This is because the TLAS degrades over time, so it is better to rebuild it every frame and the build time is negligible in real time applications
-    // NVIDIA best practices: https://developer.nvidia.com/blog/rtx-best-practices/ 
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo, true);
-
-    // if the new build scratch size is greater than the old one, we have to create a new scratch buffer
-    // NOTE: When updating a TLAS Vulray actually recreates it, so we have to use buildScratchSize instead of updateScratchSize
     if(mTLASBuildInfo.BuildSizes.buildScratchSize > mScratchBuffer.Size)
     {
         if(mScratchBuffer.Size > 0) // if not null
             mVRDev->DestroyBuffer(mScratchBuffer);
-
         mScratchBuffer = mVRDev->CreateScratchBufferTLAS(mTLASBuildInfo);
     }
-
-    mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), buildCmd);
-
-
+    mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, 1, buildCmd);
     mVRDev->AddAccelerationBuildBarrier(buildCmd);
-
     buildCmd.end();
-
-    // submit the command buffer and wait for it to finish
-    // ideally semaphores should be used here, but for simplicity we will just wait for the command buffer to finish
     auto submitInfo = vk::SubmitInfo()
         .setCommandBufferCount(1)
         .setPCommandBuffers(&buildCmd);
-
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
     mDevice.waitIdle();
-
-    // Update the descriptor, if we had used a semaphores, we would have to wait for the build to finish before updating the descriptor
-    // and make sure the descriptor is not used by the GPU at the same time
     mVRDev->UpdateDescriptorBuffer( mResourceDescBuffer,
                                     mResourceBindings[0], // the first binding is the TLAS
                                     0, // index of pResources in the binding
-                                    vr::DescriptorBufferType::Resource,
-                                    0); // index of the set in the buffer
+                                    vr::DescriptorBufferType::Resource);
 }
 
+void Compaction::Compact(vk::CommandBuffer cmdBuf)
+{
+    if(!Compacted)
+    {
+        std::vector<uint64_t> compactedSizes;
+        compactedSizes = mVRDev->GetCompactionSizes(mCompactionRequest, cmdBuf);
+        // [POI] compact the BLASes
+        // The BLAS compaction sizes may take a few frames to become available, so we need to check if the sizes are valid
+        if(compactedSizes.size() > 0)
+        {
+            // [POI]
+            // These function record a copy command of acceleration structures to the compacted BLASes
+            // Therefore we need to ensure the copy command is executed before we destroy the original BLASes and before using the compacted BLASes
+            // Two options here:
+            mBLASToDestroy = mVRDev->CompactBLAS(mCompactionRequest, compactedSizes, mBLASToCompact, cmdBuf);
+            // or
+            // auto compactedBLASes = mVRDev->CompactBLAS(mCompactionRequest, compactedSizes, cmdBuf);
+            // The first option will replace the BLASes in mBLASToCompact with the compacted BLASes and return a vector of the BLAS to destroy
+            // The second option will return a vector of the compacted BLASes and the user will have to destroy the original BLASes
+            // We will use the first option here
+            Compacted = true;
+        }
 
-void DynamicTLAS::CreateRTPipeline()
+    }
+}
+
+void Compaction::CreateRTPipeline()
 {
 
     mResourceBindings = {
@@ -279,7 +282,7 @@ void DynamicTLAS::CreateRTPipeline()
 }
 
 
-void DynamicTLAS::UpdateDescriptorSet()
+void Compaction::UpdateDescriptorSet()
 {
 
     mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
@@ -287,11 +290,11 @@ void DynamicTLAS::UpdateDescriptorSet()
     mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);    
 }
 
-void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
+void Compaction::Update(vk::CommandBuffer renderCmd)
 {
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    UpdateTLAS();
+    Compact(renderCmd);
 
     mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
@@ -314,13 +317,23 @@ void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
 
     WaitForRendering();
 
+
     Present(renderCmd);
+
+    if(mBLASToDestroy.size() > 0)
+    {
+        // [POI]
+        // Update the TLAS now that the copying of the compacted BLAS to our used BLAS is done, because the command buffer has finished executing
+        UpdateTLAS();
+        mVRDev->DestroyBLAS(mBLASToDestroy);
+        mBLASToDestroy.clear();
+    }
 
     UpdateCamera();
 }
 
 
-void DynamicTLAS::Stop()
+void Compaction::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
@@ -350,7 +363,7 @@ int main()
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new DynamicTLAS();
+	Application* app = new Compaction();
 
     app->Start();
     app->Run();
