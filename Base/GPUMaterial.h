@@ -27,5 +27,6 @@ struct GPUMaterial // has to be aligned to 16 bytes
     uint32_t VertBufferOffset = 0;
     uint32_t IndexBufferOffset = 0;
 
-    float Padding[2]; 
+    MaterialType Type = MaterialType::Opaque;
+    float Padding;
 }; 

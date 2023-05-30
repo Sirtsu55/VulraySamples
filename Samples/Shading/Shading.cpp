@@ -179,7 +179,7 @@ void Shading::CreateAS()
     {
         auto inst = vk::AccelerationStructureInstanceKHR()
             .setInstanceCustomIndex(instanceIDs[i]) // set the instance ID 
-            .setAccelerationStructureReference(mBLASHandles[i].BLASBuffer.DevAddress)
+            .setAccelerationStructureReference(mBLASHandles[i].Buffer.DevAddress)
             .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFlipFacing)
             .setMask(0xFF)
             .setInstanceShaderBindingTableRecordOffset(0);
@@ -263,7 +263,7 @@ void Shading::CreateAccumulationImage()
 void Shading::CreateRTPipeline()
 {
     mResourceBindings = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
         vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),

@@ -20,8 +20,8 @@ struct GPUMaterial // has to be aligned to 16 bytes
     float Roughness;
     uint VertBufferStart;
     uint IndexBufferStart;
-
-    float2 Padding;
+    MaterialType Type;
+    float Padding;
 };
 
 float3 GetVertex(in StructuredBuffer<Vertex> vertBuffer,

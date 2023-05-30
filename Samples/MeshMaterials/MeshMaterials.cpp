@@ -157,7 +157,7 @@ void MeshMaterials::CreateAS()
 			geomData.PrimitiveCount = geom.Indices.size() / 3;
 			geomData.DataAddresses.VertexDevAddress = mVertexBuffer.DevAddress + vertOffset * sizeof(Vertex);
 			geomData.DataAddresses.IndexDevAddress = mIndexBuffer.DevAddress + idxOffset * sizeof(uint32_t);
-			geomData.DataAddresses.TransformBuffer = mTransformBuffer.DevAddress + transOffset;
+			geomData.DataAddresses.TransformDevAddress = mTransformBuffer.DevAddress + transOffset;
 			blasinfo.Geometries.push_back(geomData);
 			
             GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
@@ -218,7 +218,7 @@ void MeshMaterials::CreateAS()
     {
         auto inst = vk::AccelerationStructureInstanceKHR()
             .setInstanceCustomIndex(instanceIDs[i]) // set the instance ID 
-            .setAccelerationStructureReference(mBLASHandles[i].BLASBuffer.DevAddress)
+            .setAccelerationStructureReference(mBLASHandles[i].Buffer.DevAddress)
             .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
             .setMask(0xFF)
             .setInstanceShaderBindingTableRecordOffset(0);
@@ -276,7 +276,7 @@ void MeshMaterials::CreateAS()
 void MeshMaterials::CreateRTPipeline()
 {
     mResourceBindings = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
         vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer)

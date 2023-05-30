@@ -116,7 +116,7 @@ void SBTData::CreateAS()
 	//Specify the instance data
     auto inst = vk::AccelerationStructureInstanceKHR()
         .setInstanceCustomIndex(0)
-		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress)
+		.setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress)
 		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
         .setMask(0xFF)
         .setInstanceShaderBindingTableRecordOffset(0);
@@ -166,7 +166,7 @@ void SBTData::CreateRTPipeline()
 {
 
     mResourceBindings = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
     };

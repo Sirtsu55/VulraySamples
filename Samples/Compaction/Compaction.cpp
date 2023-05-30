@@ -125,7 +125,7 @@ void Compaction::CreateAS()
 	//Specify the instance data
     auto inst = vk::AccelerationStructureInstanceKHR()
         .setInstanceCustomIndex(0)
-		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress)
+		.setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress)
 		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
         .setMask(0xFF)
         .setInstanceShaderBindingTableRecordOffset(0);
@@ -179,7 +179,7 @@ void Compaction::UpdateTLAS()
     // [POI] Put the new BLAS into the TLAS
     auto inst = vk::AccelerationStructureInstanceKHR()
         .setInstanceCustomIndex(0)          
-		.setAccelerationStructureReference(mBLASHandle.BLASBuffer.DevAddress) // This remains the same, because we replaced the BLAS with a compacted version
+		.setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress) // This remains the same, because we replaced the BLAS with a compacted version
 		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
         .setMask(0xFF)
         .setInstanceShaderBindingTableRecordOffset(0);
@@ -242,7 +242,7 @@ void Compaction::CreateRTPipeline()
 {
 
     mResourceBindings = {
-        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.TLASBuffer.DevAddress),
+        vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
         vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
     };

@@ -64,7 +64,7 @@ void CopySceneToBuffers(
 			geomData.PrimitiveCount = geom.Indices.size() / 3;
 			geomData.DataAddresses.VertexDevAddress = vertexBufferDevAddress + vertOffset * sizeof(Vertex);
 			geomData.DataAddresses.IndexDevAddress = indexBufferDevAddress + idxOffset * sizeof(uint32_t);
-			geomData.DataAddresses.TransformBuffer = transformBufferDevAddress + transOffset;
+			geomData.DataAddresses.TransformDevAddress = transformBufferDevAddress + transOffset;
 			blasinfo.Geometries.push_back(geomData);
 			
             GPUMaterial mat = {}; // create a material for the geometry this material will be copied into the material buffer
