@@ -3,8 +3,8 @@
 #include "Shaders/Common/Sampling.hlsl"
 #include "Shaders/Common/Ray.hlsl"
 
-#define PATH_SAMPLES 4
-#define RECURSION_LENGTH 4
+#define PATH_SAMPLES 8
+#define RECURSION_LENGTH 8
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -23,7 +23,6 @@
 struct HitInfo
 {
 	float3 Color;
-	float Attenuation;
 	float3 LightContribution;
 	bool TerminateRay;
 };
@@ -50,7 +49,6 @@ void rgen()
 	// For later recursive rays, the ray direction will be set in the closest hit shader
 
 	Payload p;
-	p.Info.Attenuation = 1.0;
 
 	uint PathSamples = 0;
 	float3 Color = float3(0, 0, 0);
@@ -88,8 +86,8 @@ void rgen()
 				break;
 		}
 		
-		Color += p.Info.Color; // Add the color of the ray to the total color
-		p.Info.Color = float3(0, 0, 0); // Reset the color for the next ray
+		Color += saturate(p.Info.Color); // Add the color of the ray to the total color
+		p.Info.Color = float3(1, 1, 1); // Reset the color for the next ray
 		PathSamples++;
 	}
 	
@@ -147,12 +145,12 @@ void chit(inout Payload p, in float2 barycentrics)
 	// calculate the pdf of the new ray direction
 	float pdf = CosineHemispherePDF(cosTheta);
 	
-	// calculate the contribution of this ray
-	float RayContribution = p.Info.Attenuation * pdf;
+	// This is the formiula for the Lambertian BRDF
+	// float3 sampledColor = ((mat.BaseColor / PI) * cosTheta) / pdf; where pdf = cos(theta) / PI
+	// The  above formula can be simplified to the following by basic algebra like this: 
+	float3 sampledColor = mat.BaseColor;
 
-	// calculate the color of the ray based on the contribution
-	float3 color = (mat.BaseColor * RayContribution);
-
+		
 
 	// Payload Update
 
@@ -162,17 +160,7 @@ void chit(inout Payload p, in float2 barycentrics)
 	// terminate the ray if the material is emissive
 	p.Info.TerminateRay = isLight;
 	// Add the color of the ray to the total color
-	p.Info.Color += color;
-
-	// [POI]
-	// The next ray will be attenuated by 1 - RayContribution
-	// Example:
-	// Ray N: Attenuation * (1 - RayContribution)
-	// Ray 1: 1.0 * (1 - 0.5) = 0.5
-	// Ray 2: 0.5 * (1 - 0.75) = 0.125
-	// Ray 3: 0.125 * (1 - 0.25) = 0.09375
-	// NOTE: this converges to 0, after infinite rays, but we can only do a finite number of rays
-	p.Info.Attenuation = (1 - RayContribution);
+	p.Info.Color *= sampledColor;
 
 	// set the new ray direction and origin
 	p.RayInfo.Direction = newDir;
@@ -184,7 +172,6 @@ void chit(inout Payload p, in float2 barycentrics)
 void miss(inout Payload p)
 {
 	p.Info.Color = float3(0.0, 0.0, 0.0);
-	p.Info.Attenuation = 1.0;
 	p.Info.LightContribution = float3(0.0, 0.0, 0.0);
 	p.Info.TerminateRay = true;
 }
