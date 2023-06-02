@@ -73,12 +73,13 @@ void Shading::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/spheres.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/room.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
         mCamera = scene.Cameras[0];
-    mCamera.Speed = 25.0f;
+    mCamera.Speed = 1.0f;
+    mCamera.Sensitivity = 25000.0f;
 
     auto& geometries = scene.Geometries;
    
@@ -136,10 +137,13 @@ void Shading::CreateAS()
     char* transData = (char*)mVRDev->MapBuffer(mTransformBuffer);
     char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
 
+    // If the scene is too dark/bright, you can adjust the emissive multiplier here
+    float EmissiveMultiplier = 1.0f;
+
     // Helper function defined in Base/Helpers.h to copy the scene data into the buffers
     CopySceneToBuffers(scene, vertData, idxData, transData, matData,
         mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, mTransformBuffer.DevAddress,
-        instanceIDs, blasCreateInfos, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
+        instanceIDs, blasCreateInfos, EmissiveMultiplier, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
 
 
     mVRDev->UnmapBuffer(mVertexBuffer);

@@ -86,12 +86,12 @@ void rgen()
 				break;
 		}
 		
-		Color += saturate(p.Info.Color); // Add the color of the ray to the total color
+		Color += p.Info.Color * p.Info.LightContribution; // Add the color of the ray to the total color
 		p.Info.Color = float3(1, 1, 1); // Reset the color for the next ray
 		PathSamples++;
 	}
 	
-	float3 Radiance = (Color * p.Info.LightContribution) / float(PathSamples);
+	float3 Radiance = (Color) / float(PathSamples);
 
 	//Apply accumulation
 	float3 Accumulated = accumulationImage[int2(LaunchID.xy)].xyz;
@@ -133,11 +133,10 @@ void chit(inout Payload p, in float2 barycentrics)
 	uint seed = asint(time) * asint(v.x) * asint(v.y) * asint(v.z); 
 
 	// Sample a new ray direction
-	float u1 = NextRandomFloat(seed);
-	float u2 = NextRandomFloat(seed);
+	float2 rand = float2(NextRandomFloat(seed), NextRandomFloat(seed));
 
 	// Sample a new ray direction
-	float3 newDir = SampleCosineHemisphere(normal, u1, u2);
+	float3 newDir = SampleCosineHemisphere(normal, rand);
 
 	// angle between the normal and the new ray direction
 	float cosTheta = dot(newDir, normal);
@@ -156,7 +155,7 @@ void chit(inout Payload p, in float2 barycentrics)
 
 	// if the material is emissive, terminate the ray and return the emissive color
 	bool isLight = any(mat.Emissive);
-	p.Info.LightContribution = isLight ? mat.Emissive * 100: float3(0.0, 0.0, 0.0);
+	p.Info.LightContribution = isLight ? mat.Emissive: float3(0.0, 0.0, 0.0);
 	// terminate the ray if the material is emissive
 	p.Info.TerminateRay = isLight;
 	// Add the color of the ray to the total color
