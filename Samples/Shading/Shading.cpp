@@ -54,7 +54,6 @@ public:
     vr::TLASHandle mTLASHandle;
 
     vr::Denoiser mDenoiser;
-    std::vector<vr::AllocatedImage> mDenoiserImages;
 
 };
 
@@ -62,6 +61,10 @@ void Shading::Start()
 {
 
     mDenoiser = mVRDev->CreateDenoiser<vr::Denoise::MedianDenoiser>(mWindowHeight, mWindowWidth);
+    mDenoiser->Initialize();
+
+    // Write to these
+    auto DenoiserImages = mDenoiser->GetInputResources();
 
     CreateBaseResources();
     CreateAccumulationImage();
@@ -82,10 +85,6 @@ void Shading::CreateAS()
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
         mCamera = scene.Cameras[0];
-
-    // Adjust the camera speed and sensitivity as you like for the scene
-    mCamera.Speed = 1.0f;
-    mCamera.Sensitivity = 25000.0f;
 
     auto& geometries = scene.Geometries;
    

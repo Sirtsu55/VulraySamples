@@ -3,8 +3,8 @@
 #include "Shaders/Common/Sampling.hlsl"
 #include "Shaders/Common/Ray.hlsl"
 
-#define PATH_SAMPLES 1
-#define RECURSION_LENGTH 2
+#define PATH_SAMPLES 8
+#define RECURSION_LENGTH 8
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
