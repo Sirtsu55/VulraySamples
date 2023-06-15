@@ -62,15 +62,6 @@ void Shading::Start()
 {
 
     mDenoiser = mVRDev->CreateDenoiser<vr::Denoise::MedianDenoiser>(mWindowHeight, mWindowWidth);
-    auto res = mDenoiser->GetRequiredResources();
-    //defined in the base application class, creates an output image to render to and a camera uniform buffer
-
-    res[0].AddUsage(vk::ImageUsageFlagBits::eStorage); // We gonna write to this image
-    res[1].AddUsage(vk::ImageUsageFlagBits::eStorage); // We gonna write to this image
-
-    auto allocatedImages = mVRDev->CreateDenoiserResources(res, mWindowHeight, mWindowWidth);
-
-    mDenoiser->Initialize(res);
 
     CreateBaseResources();
     CreateAccumulationImage();
@@ -91,6 +82,8 @@ void Shading::CreateAS()
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
         mCamera = scene.Cameras[0];
+
+    // Adjust the camera speed and sensitivity as you like for the scene
     mCamera.Speed = 1.0f;
     mCamera.Sensitivity = 25000.0f;
 
@@ -151,7 +144,7 @@ void Shading::CreateAS()
     char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
 
     // If the scene is too dark/bright, you can adjust the emissive multiplier here
-    float EmissiveMultiplier = 10.0f;
+    float EmissiveMultiplier = 100.0f;
 
     // Helper function defined in Base/Helpers.h to copy the scene data into the buffers
     CopySceneToBuffers(scene, vertData, idxData, transData, matData,
@@ -374,12 +367,6 @@ void Shading::Stop()
     
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
-
-    mDenoiser->DestroyResources();
-    for(auto& img : mDenoiserImages)
-    {
-        mVRDev->DestroyImage(img);
-    }
 
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);

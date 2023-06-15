@@ -3,8 +3,8 @@
 #include "Shaders/Common/Sampling.hlsl"
 #include "Shaders/Common/Ray.hlsl"
 
-#define PATH_SAMPLES 8
-#define RECURSION_LENGTH 8
+#define PATH_SAMPLES 1
+#define RECURSION_LENGTH 2
 
 // vk::binding(binding, set)
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure rs;
@@ -49,7 +49,7 @@ void rgen()
 	// For later recursive rays, the ray direction will be set in the closest hit shader
 
 	Payload p;
-
+	p.Info.Color = float3(1, 1, 1);
 	uint PathSamples = 0;
 	float3 Color = float3(0, 0, 0);
 
