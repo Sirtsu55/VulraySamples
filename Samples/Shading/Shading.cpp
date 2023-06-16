@@ -6,7 +6,7 @@
 #include "MeshLoader.h"
 #include "GPUMaterial.h"
 #include "Helpers.h"
-#include "Vulray/Denoisers/MedianDenoiser.h"
+#include "Vulray/Denoisers/GaussianBlurDenoiser.h"
 // This sample isn't much about the c++ code, but more about the shaders
 
 
@@ -55,16 +55,29 @@ public:
 
     vr::Denoiser mDenoiser;
 
+
+    vr::AccessibleImage mDenoiserInputImage;
+    vk::Image mDenoiserInputRawImage;
+    vr::AccessibleImage mDenoiserOutputImage;
+    vk::Image mDenoiserOutputRawImage;
 };
 
 void Shading::Start()
 {
 
-    mDenoiser = mVRDev->CreateDenoiser<vr::Denoise::MedianDenoiser>(mWindowHeight, mWindowWidth);
-    mDenoiser->Initialize();
+    mDenoiser = mVRDev->CreateDenoiser<vr::Denoise::GaussianBlurDenoiser>(mWindowWidth, mWindowHeight);
+    mDenoiser->Initialize(vk::ImageUsageFlagBits::eStorage, vk::ImageUsageFlagBits::eTransferSrc);
 
     // Write to these
-    auto DenoiserImages = mDenoiser->GetInputResources();
+    auto DenoiserInpImages = mDenoiser->GetInputResources();
+    auto DenoiserOutImages = mDenoiser->GetOutputResources();
+    
+    // We know the denoiser only has one input and one output
+
+    mDenoiserInputImage = DenoiserInpImages[0].AccessImage;
+    mDenoiserInputRawImage = DenoiserInpImages[0].AllocImage.Image;
+    mDenoiserOutputImage = DenoiserOutImages[0].AccessImage;
+    mDenoiserOutputRawImage = DenoiserOutImages[0].AllocImage.Image;
 
     CreateBaseResources();
     CreateAccumulationImage();
@@ -274,7 +287,7 @@ void Shading::CreateRTPipeline()
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mUniformBuffer),
-        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mDenoiserInputImage),
         vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),
         vr::DescriptorItem(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mVertexBuffer),
         vr::DescriptorItem(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mIndexBuffer),
@@ -331,19 +344,47 @@ void Shading::Update(vk::CommandBuffer renderCmd)
 
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
     
-    mVRDev->TransitionImageLayout(
-        mOutputImageBuffer.Image,
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eGeneral,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
     renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
 
     mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
 
-    BlitImage(renderCmd);
+
+    mDenoiser->Denoise(renderCmd);
+
+    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    vk::ImageLayout::eUndefined,
+    vk::ImageLayout::eTransferDstOptimal,
+    vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+    renderCmd);
+
+    mVRDev->TransitionImageLayout(mDenoiserOutputRawImage,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+
+
+    renderCmd.blitImage(
+        mDenoiserOutputRawImage, vk::ImageLayout::eTransferSrcOptimal,
+        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
+            vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWindowWidth, mWindowHeight, 1) }),
+        vk::Filter::eNearest);
+    
+    mVRDev->TransitionImageLayout(mDenoiserOutputRawImage,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageLayout::eGeneral,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+
+    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::ePresentSrcKHR,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
 
 
 
