@@ -79,6 +79,11 @@ void Shading::Start()
     mDenoiserOutputImage = DenoiserOutImages[0].AccessImage;
     mDenoiserOutputRawImage = DenoiserOutImages[0].AllocImage.Image;
 
+    auto settings = vr::Denoise::GaussianBlurDenoiser::Settings();
+    settings.Radius = 5;
+    settings.Sigma = 5.0f;
+    mDenoiser->SetDenoiserSettings(settings);
+
     CreateBaseResources();
     CreateAccumulationImage();
     
@@ -93,7 +98,7 @@ void Shading::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/room.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
