@@ -6,12 +6,12 @@
 #include "MeshLoader.h"
 #include "GPUMaterial.h"
 #include "Helpers.h"
-
+#include "Vulray/Denoisers/GaussianBlurDenoiser.h"
 // This sample isn't much about the c++ code, but more about the shaders
 
 
 
-class Shading : public Application
+class GaussianBlurDenoising : public Application
 {
 public:
     virtual void Start() override;
@@ -53,12 +53,37 @@ public:
     std::vector<vr::BLASHandle> mBLASHandles;
     vr::TLASHandle mTLASHandle;
 
+    vr::Denoiser mDenoiser;
 
+
+    vr::AccessibleImage mDenoiserInputImage;
+    vk::Image mDenoiserInputRawImage;
+    vr::AccessibleImage mDenoiserOutputImage;
+    vk::Image mDenoiserOutputRawImage;
 };
 
-void Shading::Start()
+void GaussianBlurDenoising::Start()
 {
-    //defined in the base application class, creates an output image to render to and a camera uniform buffer
+
+    mDenoiser = mVRDev->CreateDenoiser<vr::Denoise::GaussianBlurDenoiser>(mWindowWidth, mWindowHeight);
+    mDenoiser->Initialize(vk::ImageUsageFlagBits::eStorage, vk::ImageUsageFlagBits::eTransferSrc);
+
+    // Write to these
+    auto DenoiserInpImages = mDenoiser->GetInputResources();
+    auto DenoiserOutImages = mDenoiser->GetOutputResources();
+    
+    // We know the denoiser only has one input and one output
+
+    mDenoiserInputImage = DenoiserInpImages[0].AccessImage;
+    mDenoiserInputRawImage = DenoiserInpImages[0].AllocImage.Image;
+    mDenoiserOutputImage = DenoiserOutImages[0].AccessImage;
+    mDenoiserOutputRawImage = DenoiserOutImages[0].AllocImage.Image;
+
+    auto settings = vr::Denoise::GaussianBlurDenoiser::Settings();
+    settings.Radius = 2;
+    settings.Sigma = 1.0f;
+    mDenoiser->SetDenoiserSettings(settings);
+
     CreateBaseResources();
     CreateAccumulationImage();
     
@@ -69,17 +94,15 @@ void Shading::Start()
 
 }
 
-void Shading::CreateAS()
+void GaussianBlurDenoising::CreateAS()
 {
     mMeshLoader = MeshLoader();
     // Get the scene info from the glb file
-    auto scene = mMeshLoader.LoadGLBMesh("Assets/room.glb");
+    auto scene = mMeshLoader.LoadGLBMesh("Assets/cornell_box.glb");
 
     // Set the camera position to the center of the scene
     if(scene.Cameras.size() > 0)
         mCamera = scene.Cameras[0];
-    mCamera.Speed = 1.0f;
-    mCamera.Sensitivity = 25000.0f;
 
     auto& geometries = scene.Geometries;
    
@@ -138,7 +161,7 @@ void Shading::CreateAS()
     char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
 
     // If the scene is too dark/bright, you can adjust the emissive multiplier here
-    float EmissiveMultiplier = 1.0f;
+    float EmissiveMultiplier = 100.0f;
 
     // Helper function defined in Base/Helpers.h to copy the scene data into the buffers
     CopySceneToBuffers(scene, vertData, idxData, transData, matData,
@@ -237,7 +260,7 @@ void Shading::CreateAS()
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 }
 
-void Shading::CreateAccumulationImage()
+void GaussianBlurDenoising::CreateAccumulationImage()
 {
     auto imgInfo = vk::ImageCreateInfo()
         .setImageType(vk::ImageType::e2D)
@@ -264,12 +287,12 @@ void Shading::CreateAccumulationImage()
     // Create the accumulation image
 }
 
-void Shading::CreateRTPipeline()
+void GaussianBlurDenoising::CreateRTPipeline()
 {
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mUniformBuffer),
-        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage),
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mDenoiserInputImage),
         vr::DescriptorItem(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mMaterialBuffer),
         vr::DescriptorItem(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mVertexBuffer),
         vr::DescriptorItem(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR, 1, &mIndexBuffer),
@@ -311,12 +334,12 @@ void Shading::CreateRTPipeline()
 }
 
 
-void Shading::UpdateDescriptorSet()
+void GaussianBlurDenoising::UpdateDescriptorSet()
 {
     mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);
 }
 
-void Shading::Update(vk::CommandBuffer renderCmd)
+void GaussianBlurDenoising::Update(vk::CommandBuffer renderCmd)
 {
     // begin the command buffer
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
@@ -326,19 +349,47 @@ void Shading::Update(vk::CommandBuffer renderCmd)
 
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
     
-    mVRDev->TransitionImageLayout(
-        mOutputImageBuffer.Image,
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eGeneral,
-        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
-        renderCmd);
-
     renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
 
     mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
 
-    BlitImage(renderCmd);
+
+    mDenoiser->Denoise(renderCmd);
+
+    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    vk::ImageLayout::eUndefined,
+    vk::ImageLayout::eTransferDstOptimal,
+    vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+    renderCmd);
+
+    mVRDev->TransitionImageLayout(mDenoiserOutputRawImage,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+
+
+    renderCmd.blitImage(
+        mDenoiserOutputRawImage, vk::ImageLayout::eTransferSrcOptimal,
+        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
+            vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+            { vk::Offset3D(0, 0, 0), vk::Offset3D(mWindowWidth, mWindowHeight, 1) }),
+        vk::Filter::eNearest);
+    
+    mVRDev->TransitionImageLayout(mDenoiserOutputRawImage,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageLayout::eGeneral,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
+
+    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::ePresentSrcKHR,
+        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
+        renderCmd);
 
 
 
@@ -355,10 +406,13 @@ void Shading::Update(vk::CommandBuffer renderCmd)
 }
 
 
-void Shading::Stop()
+void GaussianBlurDenoising::Stop()
 {
+
+    
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
     
+
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
     // this was the shader module for all of the shaders in the SBT
@@ -390,7 +444,7 @@ int main()
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new Shading();
+	Application* app = new GaussianBlurDenoising();
 
     app->Start();
     app->Run();
