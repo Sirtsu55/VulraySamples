@@ -63,6 +63,7 @@ Application::Application()
     mSurface = surface;
 
     // Pick the physical device to use
+    builder.PhysicalDeviceFeatures10.samplerAnisotropy = true;
     mPhysicalDevice = builder.PickPhysicalDevice(mSurface);
 
     // Create the logical device
