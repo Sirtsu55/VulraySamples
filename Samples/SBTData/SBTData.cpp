@@ -195,26 +195,18 @@ void SBTData::CreateRTPipeline()
     hitGroup.ClosestHitShader.EntryPoint = "chit";
     shaderCollection1.HitGroups.push_back(hitGroup);
 
-    mVRDev->CreatePipelineLibrary(shaderCollection1, pipelineSettings);
+    shaderCollection1.RayGenShaders.push_back(shaderModule);
+    shaderCollection1.RayGenShaders.back().EntryPoint = "rgen";
 
-    vr::RayTracingShaderCollection shaderCollection2 = {};
-    shaderCollection2.RayGenShaders.push_back(shaderModule);
-    shaderCollection2.RayGenShaders.back().EntryPoint = "rgen";
+    shaderCollection1.MissShaders.push_back(shaderModule);
+    shaderCollection1.MissShaders.back().EntryPoint = "miss";
 
-    shaderCollection2.MissShaders.push_back(shaderModule);
-    shaderCollection2.MissShaders.back().EntryPoint = "miss";
 
-    mVRDev->CreatePipelineLibrary(shaderCollection2, pipelineSettings);
-
-    // ORDER MATTERS! The first shader collection added to the pipeline library will be the first shader collection in the pipeline
-    std::vector<vr::RayTracingShaderCollection> libraries = { shaderCollection2, shaderCollection1 };
-
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(libraries, pipelineSettings);
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection1, pipelineSettings);
     mRTPipeline = pipeline;
 
     sbtInfo.MissShaderRecordSize = sizeof(glm::vec3); // size of the miss shader record
     sbtInfo.HitGroupRecordSize = sizeof(glm::vec3); // size of the hit group shader record
-
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
@@ -224,7 +216,6 @@ void SBTData::CreateRTPipeline()
     mDevice.destroyShaderModule(shaderModule.Module);
 
     mDevice.destroyPipeline(shaderCollection1.CollectionPipeline);
-    mDevice.destroyPipeline(shaderCollection2.CollectionPipeline);
 }
 
 void SBTData::UpdateDescriptorSet()
