@@ -206,7 +206,8 @@ void SBTData::CreateRTPipeline()
 
     mVRDev->CreatePipelineLibrary(shaderCollection2, pipelineSettings);
 
-    std::vector<vr::RayTracingShaderCollection> libraries = { shaderCollection1, shaderCollection2 };
+    // ORDER MATTERS! The first shader collection added to the pipeline library will be the first shader collection in the pipeline
+    std::vector<vr::RayTracingShaderCollection> libraries = { shaderCollection2, shaderCollection1 };
 
     auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(libraries, pipelineSettings);
     mRTPipeline = pipeline;
@@ -220,6 +221,10 @@ void SBTData::CreateRTPipeline()
     // create a descriptor set for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
+    mDevice.destroyShaderModule(shaderModule.Module);
+
+    mDevice.destroyPipeline(shaderCollection1.CollectionPipeline);
+    mDevice.destroyPipeline(shaderCollection2.CollectionPipeline);
 }
 
 void SBTData::UpdateDescriptorSet()
