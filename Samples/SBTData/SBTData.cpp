@@ -186,25 +186,32 @@ void SBTData::CreateRTPipeline()
     vr::PipelineSettings pipelineSettings = {};
     pipelineSettings.PipelineLayout = mPipelineLayout;
     pipelineSettings.MaxRecursionDepth = 1;
-    pipelineSettings.MaxPayloadSize = sizeof(glm::vec4);
+    pipelineSettings.MaxPayloadSize = sizeof(glm::vec3);
     pipelineSettings.MaxHitAttributeSize = sizeof(glm::vec2);
 
-    vr::RayTracingShaderCollection shaderCollection1 = {};
+    vr::RayTracingShaderCollection shaderCollection = {};
+    shaderCollection.RayGenShaders.push_back(shaderModule);
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen";
+
+    shaderCollection.MissShaders.push_back(shaderModule);
+    shaderCollection.MissShaders.back().EntryPoint = "miss";
+
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    shaderCollection1.HitGroups.push_back(hitGroup);
-
-    shaderCollection1.RayGenShaders.push_back(shaderModule);
-    shaderCollection1.RayGenShaders.back().EntryPoint = "rgen";
-
-    shaderCollection1.MissShaders.push_back(shaderModule);
-    shaderCollection1.MissShaders.back().EntryPoint = "miss";
+    shaderCollection.HitGroups.push_back(hitGroup);
 
 
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection1, pipelineSettings);
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
     mRTPipeline = pipeline;
 
+    // [POI]
+    // We need room for our values in the SBT, so we need to specify the size of the shader records.
+    // Those are "spaces" in the SBT where we can write our data to per shader group.
+    // For example, we can have specific "MaterialProperties" structures per hit shader
+    // and fill them in the SBT, so we can have different materials for different objects.
+    // In this case we are just writing the background color and triangle color to the SBT for simplicity.
+    // Note: We don't have to worry about the alignment of the data, the CreateSBT(...) will take care of that for us.
     sbtInfo.MissShaderRecordSize = sizeof(glm::vec3); // size of the miss shader record
     sbtInfo.HitGroupRecordSize = sizeof(glm::vec3); // size of the hit group shader record
 
@@ -215,7 +222,6 @@ void SBTData::CreateRTPipeline()
 
     mDevice.destroyShaderModule(shaderModule.Module);
 
-    mDevice.destroyPipeline(shaderCollection1.CollectionPipeline);
 }
 
 void SBTData::UpdateDescriptorSet()
@@ -258,8 +264,6 @@ void SBTData::Update(vk::CommandBuffer renderCmd)
     BlitImage(renderCmd);
 
     renderCmd.end();
-
-
 
     WaitForRendering();
 

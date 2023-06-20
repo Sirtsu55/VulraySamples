@@ -49,7 +49,7 @@ std::vector<uint32_t> ShaderCompiler::CompileSPIRVFromSource(const std::vector<c
     pCompileResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
     if (pErrors && pErrors->GetStringLength() > 0)
     {
-        VULRAY_FLOG_ERROR("DXC Error: {}", pErrors->GetStringPointer());
+        VULRAY_FLOG_ERROR("DXC Error: %s", pErrors->GetStringPointer());
         return {};
     }
 
