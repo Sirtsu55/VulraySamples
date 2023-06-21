@@ -237,18 +237,29 @@ void Callable::CreateRTPipeline()
     //              |Shader IDX: 0   | ShaderIDX: 1  |
     // | rgen | ... | call0         | call1         | ... |
     // ShaderIDX specifies what index to pass to CallShader() in the shader, to call the corresponding callable shader
+    mVRDev->CreatePipelineLibrary(shaderCollection, pipelineSettings);
 
-    shaderCollection.CallableShaders.push_back(shaderModule);
-    shaderCollection.CallableShaders.back().EntryPoint = "call0"; // at index 0 in the shader binding table is the call0 shader
-
-    shaderCollection.CallableShaders.push_back(shaderModule);
-    shaderCollection.CallableShaders.back().EntryPoint = "call1"; // at index 1 in the shader binding table is the call1 shader
-
-
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline({shaderCollection}, pipelineSettings);
     mRTPipeline = pipeline;
+    
+    sbtInfo.ReserveCallableGroups = 2; // reserve space for 2 callable shaders
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
+    vr::RayTracingShaderCollection shaderCollection2 = {};
+
+    shaderCollection2.CallableShaders.push_back(shaderModule);
+    shaderCollection2.CallableShaders.back().EntryPoint = "call0"; // at index 0 in the shader binding table is the call0 shader
+
+    shaderCollection2.CallableShaders.push_back(shaderModule);
+    shaderCollection2.CallableShaders.back().EntryPoint = "call1"; // at index 1 in the shader binding table is the call1 shader
+
+    // mDevice.destroyPipeline(pipeline);
+
+    mVRDev->CreatePipelineLibrary(shaderCollection2, pipelineSettings);
+    auto[pipeline2, sbtInfo2] = mVRDev->CreateRayTracingPipeline({shaderCollection, shaderCollection2}, pipelineSettings, sbtInfo);
+    mRTPipeline = pipeline2;
+
+    mVRDev->ExtendSBT(mRTPipeline, mSBTBuffer, sbtInfo2);
 
     // create a descriptor buffer for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
