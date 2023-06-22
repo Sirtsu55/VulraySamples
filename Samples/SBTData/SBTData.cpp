@@ -26,7 +26,6 @@ public:
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
-    vr::ShaderBindingTable mSBT;    
 	vr::SBTBuffer mSBTBuffer;      
 
     std::vector<vr::DescriptorItem> mResourceBindings;
