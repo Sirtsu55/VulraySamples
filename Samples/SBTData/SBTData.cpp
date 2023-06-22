@@ -174,6 +174,7 @@ void SBTData::CreateRTPipeline()
 
     mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
 
+    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
     
     // create shaders for the ray tracing pipeline
 
@@ -182,31 +183,44 @@ void SBTData::CreateRTPipeline()
     shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/SBTShader/SBTShader.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
-    // [POI]
-    // Set the shader record sizes for our own data in the SBT
+    vr::PipelineSettings pipelineSettings = {};
+    pipelineSettings.PipelineLayout = mPipelineLayout;
+    pipelineSettings.MaxRecursionDepth = 1;
+    pipelineSettings.MaxPayloadSize = sizeof(glm::vec3);
+    pipelineSettings.MaxHitAttributeSize = sizeof(glm::vec2);
 
-    mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.EntryPoint = "rgen"; 
+    vr::RayTracingShaderCollection shaderCollection = {};
+    shaderCollection.RayGenShaders.push_back(shaderModule);
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen";
 
-    mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().EntryPoint = "miss";
-    // Even if the size isn't aligned properly now, it will be when creating the SBT
-    mSBT.MissShaderRecordSize = sizeof(glm::vec3); // background color
+    shaderCollection.MissShaders.push_back(shaderModule);
+    shaderCollection.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    mSBT.HitGroups.push_back(hitGroup);
-    mSBT.HitShaderRecordSize = sizeof(glm::vec3); // color of the triangle
+    shaderCollection.HitGroups.push_back(hitGroup);
 
-    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
-    mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    mRTPipeline = pipeline;
 
-    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
+    // [POI]
+    // We need room for our values in the SBT, so we need to specify the size of the shader records.
+    // Those are "spaces" in the SBT where we can write our data to per shader group.
+    // For example, we can have specific "MaterialProperties" structures per hit shader
+    // and fill them in the SBT, so we can have different materials for different objects.
+    // In this case we are just writing the background color and triangle color to the SBT for simplicity.
+    // Note: We don't have to worry about the alignment of the data, the CreateSBT(...) will take care of that for us.
+    sbtInfo.MissShaderRecordSize = sizeof(glm::vec3); // size of the miss shader record
+    sbtInfo.HitGroupRecordSize = sizeof(glm::vec3); // size of the hit group shader record
+
+    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
     // create a descriptor set for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
+
+    mDevice.destroyShaderModule(shaderModule.Module);
 
 }
 
@@ -251,8 +265,6 @@ void SBTData::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.end();
 
-
-
     WaitForRendering();
 
     Present(renderCmd);
@@ -268,7 +280,6 @@ void SBTData::Stop()
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
 
-    mVRDev->DestroyShader(mSBT.RayGenShader); 
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);

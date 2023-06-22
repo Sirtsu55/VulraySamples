@@ -31,7 +31,6 @@ public:
     
     vr::DescriptorBuffer mResourceDescBuffer;
 
-    vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
 	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
 
     vk::Pipeline mRTPipeline = nullptr;
@@ -218,10 +217,10 @@ void HelloTriangle::CreateRTPipeline()
     // create a descriptor set layout, for the ray tracing pipeline
     mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
     
+    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
+
     // create shaders for the ray tracing pipeline
     // Spir-V bytecode is required in the info struct
-
-
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
     // Shader compiler class from from Base/ will perform HLSL -> SPIR-V translation.
@@ -231,40 +230,56 @@ void HelloTriangle::CreateRTPipeline()
     // if compiling from glsl we would have to create a separate shader module for each stage
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
+    // [POI]
+    // Pipeline settings for the ray tracing pipeline
+    // we can set the max recursion depth, max payload size and max hit attribute size
+    // max payload size is the size of the data we that every ray can carry, in this case it is a vec3 
+    // Look at the shader code to see how the payload is used
+    // max hit attribute size is the size of the that gets passed to the hit shaders if there is a hit
+    // we get barycentric coordinates of the hit point in this case which is a vec2
+    vr::PipelineSettings pipelineSettings = {};
+    pipelineSettings.PipelineLayout = mPipelineLayout;
+    pipelineSettings.MaxRecursionDepth = 1;
+    pipelineSettings.MaxPayloadSize = sizeof(glm::vec3);
+    pipelineSettings.MaxHitAttributeSize = sizeof(glm::vec2);
+
+    // Collection of shaders for the pipeline
+    vr::RayTracingShaderCollection shaderCollection = {};
+
     // add the shader to the shader binding table which stores all the shaders for the pipeline
-    mSBT.RayGenShader = shaderModule;
+    shaderCollection.RayGenShaders.push_back(shaderModule);
     // entry point for the ray generation shader, if there are multiple entry points in the shader.
     // In this case we are using one shader module with all the required entry points, 
     // but by default it is "main" because most GLSL compilers use "main" as the default entry point
-    mSBT.RayGenShader.EntryPoint = "rgen"; 
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
 
 
-    mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().EntryPoint = "miss";
+    shaderCollection.MissShaders.push_back(shaderModule);
+    shaderCollection.MissShaders.back().EntryPoint = "miss";
 
     // [POI]
     //hit groups can contain multiple shaders, so there is another special struct for it
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    mSBT.HitGroups.push_back(hitGroup);
-    
+    shaderCollection.HitGroups.push_back(hitGroup);
+
     // create the ray tracing pipeline
 
-    // Create a layout for the pipeline
-    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
-
     // create the ray tracing pipeline, a vk::Pipeline object
-    mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    mRTPipeline = pipeline;
 
     // [POI]
     // Build the shader binding table, it is a buffer that contains the shaders for the pipeline and we can update hit record data if we want
-    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
+    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
     // create a descriptor buffer for the ray tracing pipeline
 
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
+    // Don't really need the shader module anymore
+    mDevice.destroyShaderModule(shaderModule.Module);
 
 }
 
@@ -376,8 +391,6 @@ void HelloTriangle::Stop()
     
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
-    // this was the shader module for all of the shaders in the SBT
-    mVRDev->DestroyShader(mSBT.RayGenShader); 
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);

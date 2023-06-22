@@ -25,7 +25,6 @@ public:
     vr::DescriptorBuffer mResourceDescBuffer;
 
 
-    vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
 	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
 
     vk::Pipeline mRTPipeline = nullptr;
@@ -205,18 +204,32 @@ void Callable::CreateRTPipeline()
 
 
     mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
+
+    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
     
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
     shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/Callable/Callable.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
-    mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.EntryPoint = "rgen"; 
+    vr::PipelineSettings pipelineSettings = {};
+    pipelineSettings.PipelineLayout = mPipelineLayout;
+    pipelineSettings.MaxRecursionDepth = 1;
+    pipelineSettings.MaxPayloadSize = sizeof(glm::vec3);
+    pipelineSettings.MaxHitAttributeSize = sizeof(glm::vec3);
 
-    mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().EntryPoint = "miss";
+    vr::RayTracingShaderCollection shaderCollection = {};
+    shaderCollection.RayGenShaders.push_back(shaderModule);
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
 
+
+    shaderCollection.MissShaders.push_back(shaderModule);
+    shaderCollection.MissShaders.back().EntryPoint = "miss";
+
+    vr::HitGroup hitGroup = {};
+    hitGroup.ClosestHitShader = shaderModule;
+    hitGroup.ClosestHitShader.EntryPoint = "chit";
+    shaderCollection.HitGroups.push_back(hitGroup);
     // [POI]
     // Add callable shaders to the shader binding table
     // look at the shader code to see how callable shaders are called
@@ -224,31 +237,32 @@ void Callable::CreateRTPipeline()
     //              |Shader IDX: 0   | ShaderIDX: 1  |
     // | rgen | ... | call0         | call1         | ... |
     // ShaderIDX specifies what index to pass to CallShader() in the shader, to call the corresponding callable shader
+    mVRDev->CreatePipelineLibrary(shaderCollection, pipelineSettings);
 
-    mSBT.CallableShaders.push_back(shaderModule);
-    mSBT.CallableShaders.back().EntryPoint = "call0"; // at index 0 in the shader binding table is the call0 shader
-
-    mSBT.CallableShaders.push_back(shaderModule);
-    mSBT.CallableShaders.back().EntryPoint = "call1"; // at index 1 in the shader binding table is the call1 shader
-
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline({shaderCollection}, pipelineSettings);
+    mRTPipeline = pipeline;
     
+    sbtInfo.ReserveCallableGroups = 2; // reserve space for 2 callable shaders
 
-    vr::HitGroup hitGroup = {};
-    hitGroup.ClosestHitShader = shaderModule;
-    hitGroup.ClosestHitShader.EntryPoint = "chit";
-    mSBT.HitGroups.push_back(hitGroup);
-    
+    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
+    vr::RayTracingShaderCollection shaderCollection2 = {};
 
-    // Create a layout for the pipeline
-    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
+    shaderCollection2.CallableShaders.push_back(shaderModule);
+    shaderCollection2.CallableShaders.back().EntryPoint = "call0"; // at index 0 in the shader binding table is the call0 shader
 
-    // create the ray tracing pipeline, a vk::Pipeline object
-    mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
+    shaderCollection2.CallableShaders.push_back(shaderModule);
+    shaderCollection2.CallableShaders.back().EntryPoint = "call1"; // at index 1 in the shader binding table is the call1 shader
 
-    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
+    // mDevice.destroyPipeline(pipeline);
+
+    mVRDev->CreatePipelineLibrary(shaderCollection2, pipelineSettings);
+    auto[pipeline2, sbtInfo2] = mVRDev->CreateRayTracingPipeline({shaderCollection, shaderCollection2}, pipelineSettings, sbtInfo);
+    mRTPipeline = pipeline2;
 
     // create a descriptor buffer for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
+
+    mDevice.destroyShaderModule(shaderModule.Module);
 }
 
 
@@ -300,8 +314,6 @@ void Callable::Stop()
     
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
-    // this was the shader module for all of the shaders in the SBT
-    mVRDev->DestroyShader(mSBT.RayGenShader); 
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);

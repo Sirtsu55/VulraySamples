@@ -41,7 +41,7 @@ void rgen()
 // eg. Triangles have barycentric coordinates (a, b, c) as hit attributes (built in to Vulkan/DXR)
 struct BoxHitAttributes
 {
-	float2 hitValue;
+	float3 hitValue;
 };
 
 // Intersection shader for a box, This can be used for any geometry (boxes, spheres, cylinders, etc.), but it's not very efficient 
@@ -50,7 +50,7 @@ struct BoxHitAttributes
 void isect()
 {
 	BoxHitAttributes attribs;
-	attribs.hitValue = float2(1.0, 1.0); // fill in the hit attributes, with whatever you want to pass to the closest hit shader
+	attribs.hitValue = float3(1.0, 1.0, 1.0); // fill in the hit attributes, with whatever you want to pass to the closest hit shader
 
 	float tHit = RayTCurrent(); // Get the current t value of the ray, when it hit the geometry
 
@@ -63,7 +63,7 @@ void isect()
 void chit(inout Payload p, in BoxHitAttributes attribs)
 {
 	// shade the pixel with the hit attributes, we got from the intersection shader
-  	p.hitValue = float3(attribs.hitValue, 0.0);
+  	p.hitValue = attribs.hitValue;
 }
 
 

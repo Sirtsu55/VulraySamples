@@ -44,7 +44,6 @@ public:
     vr::AllocatedImage mAccumulationImageBuffer;
     vr::AccessibleImage mAccumulationImage;
 
-    vr::ShaderBindingTable mSBT;    // contains the raygen, miss and hit groups
 	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
 
     vk::Pipeline mRTPipeline = nullptr;
@@ -138,7 +137,7 @@ void Shading::CreateAS()
     char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
 
     // If the scene is too dark/bright, you can adjust the emissive multiplier here
-    float EmissiveMultiplier = 1.0f;
+    float EmissiveMultiplier = 100.0f;
 
     // Helper function defined in Base/Helpers.h to copy the scene data into the buffers
     CopySceneToBuffers(scene, vertData, idxData, transData, matData,
@@ -276,38 +275,42 @@ void Shading::CreateRTPipeline()
         vr::DescriptorItem(6, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mAccumulationImage),
     };
 
-
     mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
+
+    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
     
     vr::ShaderCreateInfo shaderCreateInfo = {};
 
     shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
 
-    mSBT.RayGenShader = shaderModule;
-    mSBT.RayGenShader.EntryPoint = "rgen"; 
+    vr::PipelineSettings pipelineSettings = {};
+    pipelineSettings.PipelineLayout = mPipelineLayout;
+    pipelineSettings.MaxRecursionDepth = 1;
+    pipelineSettings.MaxPayloadSize = sizeof(glm::vec3);
+    pipelineSettings.MaxHitAttributeSize = sizeof(glm::vec2);
 
+    vr::RayTracingShaderCollection shaderCollection = {};
 
-    mSBT.MissShaders.push_back(shaderModule);
-    mSBT.MissShaders.back().EntryPoint = "miss";
+    shaderCollection.RayGenShaders.push_back(shaderModule);
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
+
+    shaderCollection.MissShaders.push_back(shaderModule);
+    shaderCollection.MissShaders.back().EntryPoint = "miss";
 
     vr::HitGroup hitGroup = {};
     hitGroup.ClosestHitShader = shaderModule;
     hitGroup.ClosestHitShader.EntryPoint = "chit";
-    mSBT.HitGroups.push_back(hitGroup);
-    
+    shaderCollection.HitGroups.push_back(hitGroup);
 
-    // Create a layout for the pipeline
-    mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
+    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    mRTPipeline = pipeline;
 
-    // create the ray tracing pipeline, a vk::Pipeline object
-    mRTPipeline = mVRDev->CreateRayTracingPipeline(mPipelineLayout, mSBT, 1);
+    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
-    mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, mSBT);
-
-    // create a descriptor buffer for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
-
+    
+    mDevice.destroyShaderModule(shaderModule.Module);
 }
 
 
@@ -361,8 +364,6 @@ void Shading::Stop()
     
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
-    // this was the shader module for all of the shaders in the SBT
-    mVRDev->DestroyShader(mSBT.RayGenShader); 
 
     mDevice.destroyPipeline(mRTPipeline);
     mDevice.destroyPipelineLayout(mPipelineLayout);
