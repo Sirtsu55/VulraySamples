@@ -259,8 +259,6 @@ void Callable::CreateRTPipeline()
     auto[pipeline2, sbtInfo2] = mVRDev->CreateRayTracingPipeline({shaderCollection, shaderCollection2}, pipelineSettings, sbtInfo);
     mRTPipeline = pipeline2;
 
-    mVRDev->ExtendSBT(mRTPipeline, mSBTBuffer, sbtInfo2);
-
     // create a descriptor buffer for the ray tracing pipeline
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
 
