@@ -113,7 +113,7 @@ void Callable::CreateAS()
     auto[blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
     // Create a scratch buffer for the BLAS build
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(blasBuildInfo); 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(blasBuildInfo); 
     // To have avoid allocating scratch memory, every build you can create a big scratch buffer and reuse it for all BLAS builds
     // You can create a big buffer with minimum scratch alignment properties from VulrayDevice::GetAccelerationStructureProperties()
     // and divide it into smaller buffers for each BLAS build according to how much scratch memory each BLAS needs
@@ -133,7 +133,7 @@ void Callable::CreateAS()
     mTLASHandle = tlasHandle;
 
     // Create the scratch buffer for TLAS build
-    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(tlasBuildInfo);
     
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance

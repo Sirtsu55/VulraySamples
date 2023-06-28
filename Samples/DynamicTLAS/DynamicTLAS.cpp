@@ -101,7 +101,7 @@ void DynamicTLAS::CreateAS()
 
    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo); 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo); 
 
     mBLASHandle = blasHandle;
     
@@ -203,7 +203,7 @@ void DynamicTLAS::UpdateTLAS()
         if(mScratchBuffer.Size > 0) // if not null
             mVRDev->DestroyBuffer(mScratchBuffer);
 
-        mScratchBuffer = mVRDev->CreateScratchBufferTLAS(mTLASBuildInfo);
+        mScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mTLASBuildInfo);
     }
 
     mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), buildCmd);

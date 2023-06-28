@@ -100,7 +100,7 @@ void DynamicBLAS::CreateAS()
 
    std::tie(mBLASHandle, mBLASBuildInfo) = mVRDev->CreateBLAS(blasCreateInfo); 
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(mBLASBuildInfo);
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mBLASBuildInfo);
 
     // create a TLAS
     vr::TLASCreateInfo tlasCreateInfo = {};
@@ -111,7 +111,7 @@ void DynamicBLAS::CreateAS()
 
     mTLASHandle = tlasHandle;
 
-    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(tlasBuildInfo);
 
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance
@@ -200,7 +200,7 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
 
     // [POI] bind the scratch buffer to the build info
     // it's a new build info, so we need to bind the scratch buffer to it, since it doesn't know about the scratch buffer
-    mVRDev->BindScratchBufferToBuildInfo(mUpdateScratchBuffer.DevAddress, buildInfo);
+    mVRDev->BindScratchAdressToBuildInfo(mUpdateScratchBuffer.DevAddress, buildInfo);
 
     // [POI] if new scratch size is bigger than the old one, then we need to allocate a new scratch buffer
     if(buildInfo.BuildSizes.updateScratchSize > mUpdateScratchBuffer.Size)
@@ -211,7 +211,7 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
         // [POI]
         // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo 
         // Also we don't need to explicitly bind the scratch buffer to the build info, because this function does that internally for us
-        mUpdateScratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo);
+        mUpdateScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo);
     }
 
 

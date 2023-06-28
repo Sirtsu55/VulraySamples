@@ -95,7 +95,7 @@ void SBTData::CreateAS()
    auto [blasHandle, blasBuildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
     mBLASHandle = blasHandle;
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(blasBuildInfo);
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(blasBuildInfo);
 
     // create a TLAS
     vr::TLASCreateInfo tlasCreateInfo = {};
@@ -106,7 +106,7 @@ void SBTData::CreateAS()
 
     mTLASHandle = tlasHandle;
 
-    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(tlasBuildInfo);
 
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance

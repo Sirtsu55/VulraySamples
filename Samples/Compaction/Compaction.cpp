@@ -107,7 +107,7 @@ void Compaction::CreateAS()
 
    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfo); 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo); 
 
     mBLASHandle = blasHandle;
     
@@ -117,7 +117,7 @@ void Compaction::CreateAS()
 
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->CreateTLAS(tlasCreateInfo);
 
-    mScratchBuffer = mVRDev->CreateScratchBufferTLAS(mTLASBuildInfo);
+    mScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mTLASBuildInfo);
 
     mInstanceBuffer = mVRDev->CreateInstanceBuffer(1);
 
@@ -195,7 +195,7 @@ void Compaction::UpdateTLAS()
     {
         if(mScratchBuffer.Size > 0) // if not null
             mVRDev->DestroyBuffer(mScratchBuffer);
-        mScratchBuffer = mVRDev->CreateScratchBufferTLAS(mTLASBuildInfo);
+        mScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mTLASBuildInfo);
     }
     mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, 1, buildCmd);
     mVRDev->AddAccelerationBuildBarrier(buildCmd);
@@ -230,6 +230,7 @@ void Compaction::Compact(vk::CommandBuffer cmdBuf)
             // auto compactedBLASes = mVRDev->CompactBLAS(mCompactionRequest, compactedSizes, cmdBuf);
             // The first option will replace the BLASes in mBLASToCompact with the compacted BLASes and return a vector of the BLAS to destroy
             // The second option will return a vector of the compacted BLASes and the user will have to destroy the original BLASes
+            // and replace any references to the original BLASes with the compacted BLASes before destroying the original BLASes
             // We will use the first option here
             Compacted = true;
         }

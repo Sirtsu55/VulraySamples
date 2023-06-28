@@ -235,8 +235,8 @@ void MeshMaterials::CreateAS()
     mVRDev->UpdateBuffer(InstanceBuffer, instances.data(), sizeof(vk::AccelerationStructureInstanceKHR) * instances.size());
 
     // create the scratch buffers
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferBLAS(buildInfos);
-    auto TLASScratchBuffer = mVRDev->CreateScratchBufferTLAS(tlasBuildInfo);
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfos(buildInfos);
+    auto TLASScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(tlasBuildInfo);
 
     auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
 
