@@ -170,12 +170,11 @@ void BoxIntersections::CreateRTPipeline()
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
     // create shaders for the ray tracing pipeline
-    vr::ShaderCreateInfo shaderCreateInfo = {};
 
     // [POI]
     // Have a look at the shader file to see how the intersection shader is set up
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/CustomIntersection/RaytracedBoxes.hlsl");
-    auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};
     pipelineSettings.PipelineLayout = mPipelineLayout;

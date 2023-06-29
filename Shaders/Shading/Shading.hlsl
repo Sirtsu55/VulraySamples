@@ -3,7 +3,7 @@
 #include "Shaders/Common/Sampling.hlsl"
 #include "Shaders/Common/Ray.hlsl"
 
-#define PATH_SAMPLES 4
+#define PATH_SAMPLES 1
 #define RECURSION_LENGTH 4
 
 // vk::binding(binding, set)

@@ -220,15 +220,14 @@ void HelloTriangle::CreateRTPipeline()
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
     // create shaders for the ray tracing pipeline
-    // Spir-V bytecode is required in the info struct
-    vr::ShaderCreateInfo shaderCreateInfo = {};
+    // Spir-V bytecode is required
 
     // Shader compiler class from from Base/ will perform HLSL -> SPIR-V translation.
     // DXC compiler will use lib_6_5 to compile any of the ray tracing stages eg. eRaygenKHR, eMissKHR, eClosestHitKHR, eAnyHitKHR, eIntersectionKHR
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
     // since HLSL allows multiple entry points in a single shader, we have all of the ray tracing stages in one shader
     // if compiling from glsl we would have to create a separate shader module for each stage
-    auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
+    auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     // [POI]
     // Pipeline settings for the ray tracing pipeline

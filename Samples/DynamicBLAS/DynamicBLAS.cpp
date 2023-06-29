@@ -236,10 +236,8 @@ void DynamicBLAS::CreateRTPipeline()
 
     // create shaders for the ray tracing pipeline
 
-    vr::ShaderCreateInfo shaderCreateInfo = {};
-
-    shaderCreateInfo.SPIRVCode = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
-    auto shaderModule = mVRDev->CreateShaderFromSPV(shaderCreateInfo);
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};
     pipelineSettings.PipelineLayout = mPipelineLayout;
