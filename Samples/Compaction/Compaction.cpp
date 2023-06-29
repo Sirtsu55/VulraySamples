@@ -105,7 +105,7 @@ void Compaction::CreateAS()
 
     blasCreateInfo.Geometries.push_back(geomData);
 
-   auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
+    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
 
     auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo); 
 

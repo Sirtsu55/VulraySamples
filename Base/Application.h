@@ -50,7 +50,7 @@ protected:
     vr::AccessibleImage mOutputImage;
 
 	vr::SwapchainBuilder mSwapchainBuilder;
-	vr::SwapchainStructs mSwapchainStructs;
+	vr::SwapchainResources mSwapchainResources;
 	vk::SwapchainKHR mOldSwapchain = nullptr;
 	
 	uint32_t mMaxFramesInFlight = 0;

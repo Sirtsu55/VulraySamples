@@ -264,7 +264,7 @@ void GaussianBlurDenoising::CreateAccumulationImage()
     auto imgInfo = vk::ImageCreateInfo()
         .setImageType(vk::ImageType::e2D)
         .setFormat(vk::Format::eR32G32B32A32Sfloat)
-        .setExtent(vk::Extent3D(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height, 1))
+        .setExtent(vk::Extent3D(mSwapchainResources.SwapchainExtent.width, mSwapchainResources.SwapchainExtent.height, 1))
         .setMipLevels(1)
         .setArrayLayers(1)
         .setSamples(vk::SampleCountFlagBits::e1)
@@ -361,7 +361,7 @@ void GaussianBlurDenoising::Update(vk::CommandBuffer renderCmd)
 
     mDenoiser->Denoise(renderCmd);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],
     vk::ImageLayout::eUndefined,
     vk::ImageLayout::eTransferDstOptimal,
     vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -376,7 +376,7 @@ void GaussianBlurDenoising::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.blitImage(
         mDenoiserOutputRawImage, vk::ImageLayout::eTransferSrcOptimal,
-        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
+        mSwapchainResources.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
@@ -389,7 +389,7 @@ void GaussianBlurDenoising::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],
         vk::ImageLayout::eTransferDstOptimal,
         vk::ImageLayout::ePresentSrcKHR,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),

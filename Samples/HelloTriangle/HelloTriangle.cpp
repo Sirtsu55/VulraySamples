@@ -330,7 +330,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
 
     //transition the swapchain image to transfer dst optimal
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eTransferDstOptimal,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -347,7 +347,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
     //blit the output image to the swapchain image
     renderCmd.blitImage(
         mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
-        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
+        mSwapchainResources.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
@@ -362,7 +362,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
         renderCmd);
 
     //transition the swapchain image to present
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],
         vk::ImageLayout::eTransferDstOptimal,
         vk::ImageLayout::ePresentSrcKHR,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),

@@ -83,7 +83,7 @@ Application::Application()
 	mSwapchainBuilder.BackBufferCount = 2;
     mSwapchainBuilder.ImageUsage = vk::ImageUsageFlagBits::eTransferDst;
 	mSwapchainBuilder.DesiredFormat = vk::Format::eB8G8R8A8Unorm; 
-    mSwapchainStructs = mSwapchainBuilder.BuildSwapchain();
+    mSwapchainResources = mSwapchainBuilder.BuildSwapchain();
     
     //Create command pools
 	vk::CommandPoolCreateInfo poolInfo = {};
@@ -91,7 +91,7 @@ Application::Application()
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer; // release command buffers back to pool
 	mGraphicsPool = mDevice.createCommandPool(poolInfo);
     
-	mMaxFramesInFlight = static_cast<uint32_t>(mSwapchainStructs.SwapchainImageViews.size());
+	mMaxFramesInFlight = static_cast<uint32_t>(mSwapchainResources.SwapchainImageViews.size());
     
 	//create command buffers
 	vk::CommandBufferAllocateInfo allocInfo = {};
@@ -141,7 +141,7 @@ void Application::BeginFrame()
     DeltaTime = mFrameTimer.Endd();
     mFrameTimer.Start();
     //Acquire the next image
-    auto result = mDevice.acquireNextImageKHR(mSwapchainStructs.SwapchainHandle, UINT64_MAX, mRenderSemaphore, nullptr, &mCurrentSwapchainImage);
+    auto result = mDevice.acquireNextImageKHR(mSwapchainResources.SwapchainHandle, UINT64_MAX, mRenderSemaphore, nullptr, &mCurrentSwapchainImage);
 
     if(mOldSwapchain)
     {
@@ -185,7 +185,7 @@ void Application::Present(vk::CommandBuffer commandBuffer)
         .setWaitSemaphoreCount(1)
         .setPWaitSemaphores(&mPresentSemaphore)
         .setSwapchainCount(1)
-        .setPSwapchains(&mSwapchainStructs.SwapchainHandle)
+        .setPSwapchains(&mSwapchainResources.SwapchainHandle)
         .setPImageIndices(&mCurrentSwapchainImage);
     
     // Pass a pointer, not a reference, because Vulkan-hpp EnhancedMode is on, which throws an error if result is not vk::Result::eSuccess
@@ -215,7 +215,7 @@ void Application::CreateBaseResources()
     auto imageCreateInfo = vk::ImageCreateInfo()
         .setImageType(vk::ImageType::e2D)
         .setFormat(vk::Format::eR16G16B16A16Sfloat)
-        .setExtent(vk::Extent3D(mSwapchainStructs.SwapchainExtent, 1))
+        .setExtent(vk::Extent3D(mSwapchainResources.SwapchainExtent, 1))
         .setMipLevels(1)
         .setArrayLayers(1)
         .setSamples(vk::SampleCountFlagBits::e1)
@@ -253,7 +253,7 @@ void Application::UpdateCamera()
     glfwGetCursorPos(mWindow, &mMousePos.x, &mMousePos.y);
 
     // normalize the mouse position
-    glm::dvec2 resDividend = glm::dvec2(mSwapchainStructs.SwapchainExtent.width, mSwapchainStructs.SwapchainExtent.height);
+    glm::dvec2 resDividend = glm::dvec2(mSwapchainResources.SwapchainExtent.width, mSwapchainResources.SwapchainExtent.height);
     glm::dvec2 delta = (mMousePos - lastMousePos) / resDividend;
 
     if(glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
@@ -297,7 +297,7 @@ void Application::UpdateCamera()
 
     glm::mat4 view = mCamera.GetViewMatrix();
 
-    mCamera.AspectRatio = (float)mSwapchainStructs.SwapchainExtent.width / (float)mSwapchainStructs.SwapchainExtent.height;
+    mCamera.AspectRatio = (float)mSwapchainResources.SwapchainExtent.width / (float)mSwapchainResources.SwapchainExtent.height;
     glm::mat4 proj = mCamera.GetProjectionMatrix();
 
     //update the view matrix
@@ -319,11 +319,11 @@ void Application::UpdateCamera()
 void Application::HandleResize()
 {
     // save the old swapchain, because we need to destroy it later after all operations on it are finished
-    mOldSwapchain = mSwapchainStructs.SwapchainHandle;
+    mOldSwapchain = mSwapchainResources.SwapchainHandle;
     // Destroy the old swapchain resources, but not the swapchain itself
-    vr::SwapchainBuilder::DestroySwapchainResources(mDevice, mSwapchainStructs);
+    vr::SwapchainBuilder::DestroySwapchainResources(mDevice, mSwapchainResources);
 
-    mSwapchainStructs = mSwapchainBuilder.BuildSwapchain(mOldSwapchain);
+    mSwapchainResources = mSwapchainBuilder.BuildSwapchain(mOldSwapchain);
 
     // get the new framebuffer size
     int width, height;
@@ -342,7 +342,7 @@ void Application::HandleResize()
 
 void Application::BlitImage(vk::CommandBuffer renderCmd)
 {
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],
     vk::ImageLayout::eUndefined,
     vk::ImageLayout::eTransferDstOptimal,
     vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -357,7 +357,7 @@ void Application::BlitImage(vk::CommandBuffer renderCmd)
 
     renderCmd.blitImage(
         mOutputImageBuffer.Image, vk::ImageLayout::eTransferSrcOptimal,
-        mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
+        mSwapchainResources.SwapchainImages[mCurrentSwapchainImage], vk::ImageLayout::eTransferDstOptimal,
         vk::ImageBlit(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
             { vk::Offset3D(0, 0, 0), vk::Offset3D(mRenderWidth, mRenderHeight, 1) },
             vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
@@ -370,7 +370,7 @@ void Application::BlitImage(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->TransitionImageLayout(mSwapchainStructs.SwapchainImages[mCurrentSwapchainImage],
+    mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],
         vk::ImageLayout::eTransferDstOptimal,
         vk::ImageLayout::ePresentSrcKHR,
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
@@ -408,7 +408,7 @@ Application::~Application()
     mDevice.destroySemaphore(mPresentSemaphore);
     mDevice.destroyCommandPool(mGraphicsPool);
     
-    vr::SwapchainBuilder::DestroySwapchain(mDevice, mSwapchainStructs);
+    vr::SwapchainBuilder::DestroySwapchain(mDevice, mSwapchainResources);
     mDevice.destroy();
     mInstance.InstanceHandle.destroySurfaceKHR(mSurface);
 
