@@ -207,7 +207,7 @@ void Callable::CreateRTPipeline()
 
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
     
-    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Callable/Callable.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};

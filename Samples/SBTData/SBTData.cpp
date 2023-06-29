@@ -177,7 +177,7 @@ void SBTData::CreateRTPipeline()
     
     // create shaders for the ray tracing pipeline
 
-    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/SBTShader/SBTShader.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};

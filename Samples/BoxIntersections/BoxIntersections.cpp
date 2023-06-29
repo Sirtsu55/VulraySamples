@@ -173,7 +173,7 @@ void BoxIntersections::CreateRTPipeline()
 
     // [POI]
     // Have a look at the shader file to see how the intersection shader is set up
-    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/CustomIntersection/RaytracedBoxes.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};

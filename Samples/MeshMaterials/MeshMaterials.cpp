@@ -286,7 +286,7 @@ void MeshMaterials::CreateRTPipeline()
     
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
-    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulGeometry/ColorfulGeometry.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};

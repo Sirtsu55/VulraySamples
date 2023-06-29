@@ -253,7 +253,7 @@ void Compaction::CreateRTPipeline()
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
     
     // create shaders for the ray tracing pipeline
-    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
+    auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
     vr::PipelineSettings pipelineSettings = {};
