@@ -49,6 +49,7 @@ function(ConfigureTarget tgt)
 			COMMAND ${CMAKE_COMMAND} -E copy ${DXC_DLL} $<TARGET_FILE_DIR:${tgt}>
 			COMMAND ${CMAKE_COMMAND} -E echo "Copying DXC dll")
 	endif()
+
 endfunction()
 
 
