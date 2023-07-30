@@ -63,8 +63,8 @@ void GaussianBlurDenoising::Start()
     vr::Denoise::DenoiserSettings settings = {};
     settings.Height = mRenderHeight;
     settings.Width = mRenderWidth;
-    settings.InputUsage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
-    settings.OutputUsage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
+    settings.InputUsage = vk::ImageUsageFlagBits::eTransferDst;
+    settings.OutputUsage = vk::ImageUsageFlagBits::eTransferSrc;
 
     mDenoiser = mVRDev->CreateDenoiser<vr::Denoise::GaussianBlurDenoiser>(settings);
 
