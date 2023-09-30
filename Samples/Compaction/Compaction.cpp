@@ -4,7 +4,6 @@
 #include "FileRead.h"
 #include "ShaderCompiler.h"
 
-
 class Compaction : public Application
 {
 public:
@@ -12,25 +11,23 @@ public:
     virtual void Update(vk::CommandBuffer renderCmd) override;
     virtual void Stop() override;
 
-    //functions to break up the start function
+    // functions to break up the start function
     void CreateAS();
     void CreateRTPipeline();
     void UpdateDescriptorSet();
-
 
     void Compact(vk::CommandBuffer cmd);
 
     // Update the TLAS when the BLAS changes due to compaction
     void UpdateTLAS();
-public:
 
+public:
     ShaderCompiler mShaderCompiler;
 
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
-
-	vr::SBTBuffer mSBTBuffer;      
+    vr::SBTBuffer mSBTBuffer;
 
     std::vector<vr::DescriptorItem> mResourceBindings;
     vk::DescriptorSetLayout mResourceDescriptorLayout;
@@ -41,15 +38,14 @@ public:
 
     vr::BLASHandle mBLASHandle;
 
-
     vr::TLASHandle mTLASHandle;
-    vr::TLASBuildInfo mTLASBuildInfo; 
-    vr::AllocatedBuffer mInstanceBuffer; 
+    vr::TLASBuildInfo mTLASBuildInfo;
+    vr::AllocatedBuffer mInstanceBuffer;
     vr::AllocatedBuffer mScratchBuffer;
 
     //[POI] - Compaction
-    std::vector<vr::BLASHandle*> mBLASToCompact; // all the BLASes that need to be compacted
-    std::vector<vr::BLASHandle> mBLASToDestroy; // all the BLASes that need to be destroyed after compaction
+    std::vector<vr::BLASHandle *> mBLASToCompact; // all the BLASes that need to be compacted
+    std::vector<vr::BLASHandle> mBLASToDestroy;   // all the BLASes that need to be destroyed after compaction
     vr::CompactionRequest mCompactionRequest;
     bool Compacted = false;
 };
@@ -57,12 +53,11 @@ public:
 void Compaction::Start()
 {
     CreateBaseResources();
-    
+
     CreateAS();
-    
+
     CreateRTPipeline();
     UpdateDescriptorSet();
-
 }
 
 void Compaction::CreateAS()
@@ -72,28 +67,25 @@ void Compaction::CreateAS()
     float vertices[] = {
         1.0f, -1.0f, 0.0f,
         -1.0f, -1.0f, 0.0f,
-        0.0f,  1.0f, 0.0f
-    };
-    uint32_t indices[] = { 0, 1, 2 };
+        0.0f, 1.0f, 0.0f};
+    uint32_t indices[] = {0, 1, 2};
 
     mVertexBuffer = mVRDev->CreateBuffer(
         sizeof(float) * 3 * 3,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR, // this buffer will be used as a source for the BLAS
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mIndexBuffer = mVRDev->CreateBuffer(
         sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
-
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
-    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); 
-    
+    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3);
 
     vr::BLASCreateInfo blasCreateInfo = {};
     blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
-    
+
     vr::GeometryData geomData = {};
 
     geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
@@ -105,15 +97,15 @@ void Compaction::CreateAS()
 
     blasCreateInfo.Geometries.push_back(geomData);
 
-    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
+    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo);
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo); 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo);
 
     mBLASHandle = blasHandle;
-    
+
     vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-    tlasCreateInfo.MaxInstanceCount = 5; 
+    tlasCreateInfo.MaxInstanceCount = 5;
 
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->CreateTLAS(tlasCreateInfo);
 
@@ -121,54 +113,53 @@ void Compaction::CreateAS()
 
     mInstanceBuffer = mVRDev->CreateInstanceBuffer(1);
 
-	//Specify the instance data
+    // Specify the instance data
     auto inst = vk::AccelerationStructureInstanceKHR()
-        .setInstanceCustomIndex(0)
-		.setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress)
-		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
-        .setMask(0xFF)
-        .setInstanceShaderBindingTableRecordOffset(0);
+                    .setInstanceCustomIndex(0)
+                    .setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress)
+                    .setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
+                    .setMask(0xFF)
+                    .setInstanceShaderBindingTableRecordOffset(0);
 
     // set the transform matrix to identity
     inst.transform = {
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f
-    };
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f};
 
     mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    std::vector<vr::BLASBuildInfo> buildInfos = { buildInfo }; 
-    
-    mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    std::vector<vr::BLASBuildInfo> buildInfos = {buildInfo};
+
+    mVRDev->BuildBLAS(buildInfos, buildCmd);
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd);
 
-    mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, 1, buildCmd); 
+    mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, 1, buildCmd);
 
     buildCmd.end();
 
     // submit the command buffer and wait for it to finish
     auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
+                          .setCommandBufferCount(1)
+                          .setPCommandBuffers(&buildCmd);
 
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
+
     mDevice.waitIdle();
 
     // Free the scratch buffers
-    mVRDev->DestroyBuffer(BLASscratchBuffer); 
+    mVRDev->DestroyBuffer(BLASscratchBuffer);
 
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 
     // [POI] get a request for compaction
 
-    mBLASToCompact.push_back(&mBLASHandle); // add the BLAS to the list of BLASes to compact
+    mBLASToCompact.push_back(&mBLASHandle);                         // add the BLAS to the list of BLASes to compact
     mCompactionRequest = mVRDev->RequestCompaction(mBLASToCompact); // get the compaction request
 }
 // A function that updates the TLAS
@@ -177,23 +168,22 @@ void Compaction::UpdateTLAS()
 {
     // [POI] Put the new BLAS into the TLAS
     auto inst = vk::AccelerationStructureInstanceKHR()
-        .setInstanceCustomIndex(0)          
-		.setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress) // This remains the same, because we replaced the BLAS with a compacted version
-		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
-        .setMask(0xFF)
-        .setInstanceShaderBindingTableRecordOffset(0);
+                    .setInstanceCustomIndex(0)
+                    .setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress) // This remains the same, because we replaced the BLAS with a compacted version
+                    .setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
+                    .setMask(0xFF)
+                    .setInstanceShaderBindingTableRecordOffset(0);
     inst.transform = {
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f
-    };
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f};
     mVRDev->UpdateBuffer(mInstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool);
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo, true);
-    if(mTLASBuildInfo.BuildSizes.buildScratchSize > mScratchBuffer.Size)
+    if (mTLASBuildInfo.BuildSizes.buildScratchSize > mScratchBuffer.Size)
     {
-        if(mScratchBuffer.Size > 0) // if not null
+        if (mScratchBuffer.Size > 0) // if not null
             mVRDev->DestroyBuffer(mScratchBuffer);
         mScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mTLASBuildInfo);
     }
@@ -201,25 +191,25 @@ void Compaction::UpdateTLAS()
     mVRDev->AddAccelerationBuildBarrier(buildCmd);
     buildCmd.end();
     auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
+                          .setCommandBufferCount(1)
+                          .setPCommandBuffers(&buildCmd);
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
     mDevice.waitIdle();
-    mVRDev->UpdateDescriptorBuffer( mResourceDescBuffer,
-                                    mResourceBindings[0], // the first binding is the TLAS
-                                    0, // index of pResources in the binding
-                                    vr::DescriptorBufferType::Resource);
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer,
+                                   mResourceBindings[0], // the first binding is the TLAS
+                                   0,                    // index of pResources in the binding
+                                   vr::DescriptorBufferType::Resource);
 }
 
 void Compaction::Compact(vk::CommandBuffer cmdBuf)
 {
-    if(!Compacted)
+    if (!Compacted)
     {
         std::vector<uint64_t> compactedSizes;
         compactedSizes = mVRDev->GetCompactionSizes(mCompactionRequest, cmdBuf);
         // [POI] compact the BLASes
         // The BLAS compaction sizes may take a few frames to become available, so we need to check if the sizes are valid
-        if(compactedSizes.size() > 0)
+        if (compactedSizes.size() > 0)
         {
             // [POI]
             // These function record a copy command of acceleration structures to the compacted BLASes
@@ -234,7 +224,6 @@ void Compaction::Compact(vk::CommandBuffer cmdBuf)
             // We will use the first option here
             Compacted = true;
         }
-
     }
 }
 
@@ -244,14 +233,12 @@ void Compaction::CreateRTPipeline()
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
-        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
-    };
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage)};
 
-
-    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
+    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings);
 
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
-    
+
     // create shaders for the ray tracing pipeline
     auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
@@ -265,7 +252,7 @@ void Compaction::CreateRTPipeline()
     vr::RayTracingShaderCollection shaderCollection = {};
 
     shaderCollection.RayGenShaders.push_back(shaderModule);
-    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen";
 
     shaderCollection.MissShaders.push_back(shaderModule);
     shaderCollection.MissShaders.back().EntryPoint = "miss";
@@ -275,23 +262,22 @@ void Compaction::CreateRTPipeline()
     hitGroup.ClosestHitShader.EntryPoint = "chit";
     shaderCollection.HitGroups.push_back(hitGroup);
 
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    auto [pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
     mRTPipeline = pipeline;
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
-    
+
     mDevice.destroyShaderModule(shaderModule.Module);
 }
-
 
 void Compaction::UpdateDescriptorSet()
 {
 
     mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
 
-    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);    
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);
 }
 
 void Compaction::Update(vk::CommandBuffer renderCmd)
@@ -300,7 +286,7 @@ void Compaction::Update(vk::CommandBuffer renderCmd)
 
     Compact(renderCmd);
 
-    mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorBuffer({mResourceDescBuffer}, renderCmd);
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
 
     mVRDev->TransitionImageLayout(
@@ -310,21 +296,18 @@ void Compaction::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight);
+    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight, 1, renderCmd);
 
     // Helper function in Application Class to blit the image to the swapchain image
     BlitImage(renderCmd);
 
     renderCmd.end();
 
-
-
     WaitForRendering();
-
 
     Present(renderCmd);
 
-    if(mBLASToDestroy.size() > 0)
+    if (mBLASToDestroy.size() > 0)
     {
         // [POI]
         // Update the TLAS now that the copying of the compacted BLAS to our used BLAS is done, because the command buffer has finished executing
@@ -336,11 +319,10 @@ void Compaction::Update(vk::CommandBuffer renderCmd)
     UpdateCamera();
 }
 
-
 void Compaction::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
-    
+
     mVRDev->DestroyBuffer(mScratchBuffer);
     mVRDev->DestroyBuffer(mInstanceBuffer);
 
@@ -359,13 +341,12 @@ void Compaction::Stop()
     mVRDev->DestroyTLAS(mTLASHandle);
 }
 
-
 int main()
 {
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new Compaction();
+    Application *app = new Compaction();
 
     app->Start();
     app->Run();

@@ -4,7 +4,6 @@
 #include "FileRead.h"
 #include "ShaderCompiler.h"
 
-
 class DynamicBLAS : public Application
 {
 public:
@@ -12,7 +11,7 @@ public:
     virtual void Update(vk::CommandBuffer renderCmd) override;
     virtual void Stop() override;
 
-    //functions to break up the start function
+    // functions to break up the start function
     void CreateAS();
     void CreateRTPipeline();
     void UpdateDescriptorSet();
@@ -20,13 +19,12 @@ public:
     void UpdateBLAS(vk::CommandBuffer cmd);
 
 public:
-
     ShaderCompiler mShaderCompiler;
 
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
-	vr::SBTBuffer mSBTBuffer;      
+    vr::SBTBuffer mSBTBuffer;
 
     std::vector<vr::DescriptorItem> mResourceBindings;
     vk::DescriptorSetLayout mResourceDescriptorLayout;
@@ -43,19 +41,16 @@ public:
     vr::AllocatedBuffer mUpdateScratchBuffer;
 
     vr::TLASHandle mTLASHandle;
-
-
 };
 
 void DynamicBLAS::Start()
 {
     CreateBaseResources();
-    
+
     CreateAS();
-    
+
     CreateRTPipeline();
     UpdateDescriptorSet();
-
 }
 
 void DynamicBLAS::CreateAS()
@@ -65,28 +60,25 @@ void DynamicBLAS::CreateAS()
     float vertices[] = {
         1.0f, -1.0f, 0.0f,
         -1.0f, -1.0f, 0.0f,
-        0.0f,  1.0f, 0.0f
-    };
-    uint32_t indices[] = { 0, 1, 2 };
+        0.0f, 1.0f, 0.0f};
+    uint32_t indices[] = {0, 1, 2};
 
     mVertexBuffer = mVRDev->CreateBuffer(
         sizeof(float) * 3 * 3,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR, // this buffer will be used as a source for the BLAS
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mIndexBuffer = mVRDev->CreateBuffer(
         sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
-
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
-    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); 
-    
+    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3);
 
     vr::BLASCreateInfo blasCreateInfo = {};
     blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
-    
+
     vr::GeometryData geomData = {};
 
     geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
@@ -98,7 +90,7 @@ void DynamicBLAS::CreateAS()
 
     blasCreateInfo.Geometries.push_back(geomData);
 
-   std::tie(mBLASHandle, mBLASBuildInfo) = mVRDev->CreateBLAS(blasCreateInfo); 
+    std::tie(mBLASHandle, mBLASBuildInfo) = mVRDev->CreateBLAS(blasCreateInfo);
 
     auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mBLASBuildInfo);
 
@@ -116,49 +108,47 @@ void DynamicBLAS::CreateAS()
     // create a buffer for the instance data
     auto InstanceBuffer = mVRDev->CreateInstanceBuffer(1); // 1 instance
 
-    
-	//Specify the instance data
+    // Specify the instance data
     auto inst = vk::AccelerationStructureInstanceKHR()
-        .setInstanceCustomIndex(0)
-		.setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress)
-		.setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
-        .setMask(0xFF)
-        .setInstanceShaderBindingTableRecordOffset(0);
+                    .setInstanceCustomIndex(0)
+                    .setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress)
+                    .setFlags(vk::GeometryInstanceFlagBitsKHR::eForceOpaque)
+                    .setMask(0xFF)
+                    .setInstanceShaderBindingTableRecordOffset(0);
 
     // set the transform matrix to identity
     inst.transform = {
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f
-    };
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f};
 
     mVRDev->UpdateBuffer(InstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    std::vector<vr::BLASBuildInfo> buildInfos = { mBLASBuildInfo }; 
-    
-    mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    std::vector<vr::BLASBuildInfo> buildInfos = {mBLASBuildInfo};
+
+    mVRDev->BuildBLAS(buildInfos, buildCmd);
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd); // Add a barrier to the command buffer to make sure the BLAS build is finished before the TLAS build starts
 
-    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd); 
+    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, 1, buildCmd);
 
     buildCmd.end();
 
     // submit the command buffer and wait for it to finish
     auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
+                          .setCommandBufferCount(1)
+                          .setPCommandBuffers(&buildCmd);
 
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
+
     mDevice.waitIdle();
 
     // Free the scratch buffers
-    mVRDev->DestroyBuffer(BLASscratchBuffer); 
+    mVRDev->DestroyBuffer(BLASscratchBuffer);
     mVRDev->DestroyBuffer(TLASScratchBuffer);
 
     mVRDev->DestroyBuffer(InstanceBuffer);
@@ -173,14 +163,13 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
     float vertices[] = {
         size, -size, 0.0f,
         -size, -size, 0.0f,
-        0.0f, size, 0.0f
-    };
+        0.0f, size, 0.0f};
 
     // [POI] Additional Info
-    // Vulkan requires the whole buffer with same size and the same number of primitives as the source BLAS, so if you want to update only one primitive, 
+    // Vulkan requires the whole buffer with same size and the same number of primitives as the source BLAS, so if you want to update only one primitive,
     // you still have to give vulkan the whole buffer, not parts that you want to update
 
-    //Update the vertex buffer
+    // Update the vertex buffer
     mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
 
     // [POI] set the BLAS to update
@@ -194,8 +183,6 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
     // this line can be removed, but to demonstrate how to use it, we will set the device addresses to the new ones, although they remain unchanged
     updateInfo.NewGeometryAddresses.push_back(vr::GeometryDeviceAddress(mVertexBuffer.DevAddress, mIndexBuffer.DevAddress));
 
-
-
     auto buildInfo = mVRDev->UpdateBLAS(updateInfo);
 
     // [POI] bind the scratch buffer to the build info
@@ -203,22 +190,20 @@ void DynamicBLAS::UpdateBLAS(vk::CommandBuffer cmd)
     mVRDev->BindScratchAdressToBuildInfo(mUpdateScratchBuffer.DevAddress, buildInfo);
 
     // [POI] if new scratch size is bigger than the old one, then we need to allocate a new scratch buffer
-    if(buildInfo.BuildSizes.updateScratchSize > mUpdateScratchBuffer.Size)
+    if (buildInfo.BuildSizes.updateScratchSize > mUpdateScratchBuffer.Size)
     {
-        if(mUpdateScratchBuffer.Size > 0) // if the old scratch buffer is not empty, destroy it
+        if (mUpdateScratchBuffer.Size > 0) // if the old scratch buffer is not empty, destroy it
             mVRDev->DestroyBuffer(mUpdateScratchBuffer);
 
         // [POI]
-        // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo 
+        // create a new scratch buffer, NOTE: we specify it is the update mode, because it has to use updatescratchsize in the buildinfo
         // Also we don't need to explicitly bind the scratch buffer to the build info, because this function does that internally for us
         mUpdateScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo);
     }
 
-
-    mVRDev->BuildBLAS({ buildInfo }, cmd);
+    mVRDev->BuildBLAS({buildInfo}, cmd);
     mVRDev->AddAccelerationBuildBarrier(cmd);
 }
-
 
 void DynamicBLAS::CreateRTPipeline()
 {
@@ -226,11 +211,9 @@ void DynamicBLAS::CreateRTPipeline()
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
-        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
-    };
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage)};
 
-
-    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
+    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings);
 
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
 
@@ -248,7 +231,7 @@ void DynamicBLAS::CreateRTPipeline()
     vr::RayTracingShaderCollection shaderCollection = {};
 
     shaderCollection.RayGenShaders.push_back(shaderModule);
-    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen";
 
     shaderCollection.MissShaders.push_back(shaderModule);
     shaderCollection.MissShaders.back().EntryPoint = "miss";
@@ -258,24 +241,22 @@ void DynamicBLAS::CreateRTPipeline()
     hitGroup.ClosestHitShader.EntryPoint = "chit";
     shaderCollection.HitGroups.push_back(hitGroup);
 
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    auto [pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
     mRTPipeline = pipeline;
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
-    
+
     mDevice.destroyShaderModule(shaderModule.Module);
-
 }
-
 
 void DynamicBLAS::UpdateDescriptorSet()
 {
 
     mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
 
-    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);    
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);
 }
 
 void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
@@ -284,7 +265,7 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
 
     UpdateBLAS(renderCmd);
 
-    mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorBuffer({mResourceDescBuffer}, renderCmd);
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
 
     mVRDev->TransitionImageLayout(
@@ -294,14 +275,12 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight);
+    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight, 1, renderCmd);
 
     // Helper function in Application Class to blit the image to the swapchain image
     BlitImage(renderCmd);
 
     renderCmd.end();
-
-
 
     WaitForRendering();
 
@@ -310,11 +289,10 @@ void DynamicBLAS::Update(vk::CommandBuffer renderCmd)
     UpdateCamera();
 }
 
-
 void DynamicBLAS::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
-    
+
     mVRDev->DestroyBuffer(mUpdateScratchBuffer);
 
     // destroy all the resources we created
@@ -332,13 +310,12 @@ void DynamicBLAS::Stop()
     mVRDev->DestroyTLAS(mTLASHandle);
 }
 
-
 int main()
 {
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new DynamicBLAS();
+    Application *app = new DynamicBLAS();
 
     app->Start();
     app->Run();

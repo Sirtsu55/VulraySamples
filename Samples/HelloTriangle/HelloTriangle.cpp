@@ -61,13 +61,13 @@ void HelloTriangle::CreateAS()
 
     // create a buffer for the vertices and copy the data to it
     mVertexBuffer = mVRDev->CreateBuffer(
-        sizeof(float) * 3 * 3,                                                 // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,                // we will be writing to this buffer on the CPU, so we need to set this flag, the buffer is also host visible so it is not fast GPU memory
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
+        sizeof(float) * 3 * 3,                                                // 3 vertices, 3 floats per vertex
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR, // this buffer will be used as a source for the BLAS
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);              // we will be writing to this buffer on the CPU, so we need to set this flag, the buffer is also host visible so it is not fast GPU memory
     mIndexBuffer = mVRDev->CreateBuffer(
-        sizeof(uint32_t) * 3,                                   // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, // same as above
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
+        sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT); // same as above
 
     // upload the vertex data to the buffer, UpdateBuffer(...) will use mapping the buffer and memcpy
     mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
@@ -142,7 +142,7 @@ void HelloTriangle::CreateAS()
     mVRDev->UpdateBuffer(InstanceBuffer, &inst, sizeof(vk::AccelerationStructureInstanceKHR), 0);
 
     // create a command buffer to build the BLAS and TLAS, mGraphicsPool is a command pool that is created in the Base Application class
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool);
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
@@ -304,7 +304,7 @@ void HelloTriangle::Update(vk::CommandBuffer renderCmd)
 
     // [POI]
     // RAYTRACING INITIATING
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
+    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight, 1, renderCmd);
 
     // transition the swapchain image to transfer dst optimal
     mVRDev->TransitionImageLayout(mSwapchainResources.SwapchainImages[mCurrentSwapchainImage],

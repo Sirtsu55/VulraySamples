@@ -9,8 +9,6 @@
 
 // This sample isn't much about the c++ code, but more about the shaders
 
-
-
 class Shading : public Application
 {
 public:
@@ -18,7 +16,7 @@ public:
     virtual void Update(vk::CommandBuffer renderCmd) override;
     virtual void Stop() override;
 
-    //functions to break up the start function
+    // functions to break up the start function
     void CreateAS();
     void CreateRTPipeline();
     void UpdateDescriptorSet();
@@ -27,9 +25,9 @@ public:
 
 public:
     MeshLoader mMeshLoader;
-    
+
     ShaderCompiler mShaderCompiler;
-    
+
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
     vr::AllocatedBuffer mTransformBuffer;
@@ -38,34 +36,30 @@ public:
     vk::DescriptorSetLayout mResourceDescriptorLayout;
     vr::DescriptorBuffer mResourceDescBuffer;
 
-
     vr::AllocatedBuffer mMaterialBuffer;
-    
+
     vr::AllocatedImage mAccumulationImageBuffer;
     vr::AccessibleImage mAccumulationImage;
 
-	vr::SBTBuffer mSBTBuffer;       // contains the shader records for the SBT
+    vr::SBTBuffer mSBTBuffer; // contains the shader records for the SBT
 
     vk::Pipeline mRTPipeline = nullptr;
     vk::PipelineLayout mPipelineLayout = nullptr;
 
     std::vector<vr::BLASHandle> mBLASHandles;
     vr::TLASHandle mTLASHandle;
-
-
 };
 
 void Shading::Start()
 {
-    //defined in the base application class, creates an output image to render to and a camera uniform buffer
+    // defined in the base application class, creates an output image to render to and a camera uniform buffer
     CreateBaseResources();
     CreateAccumulationImage();
-    
+
     CreateAS();
-    
+
     CreateRTPipeline();
     UpdateDescriptorSet();
-
 }
 
 void Shading::CreateAS()
@@ -75,51 +69,44 @@ void Shading::CreateAS()
     auto scene = mMeshLoader.LoadGLBMesh("Assets/room.glb");
 
     // Set the camera position to the center of the scene
-    if(scene.Cameras.size() > 0)
+    if (scene.Cameras.size() > 0)
         mCamera = scene.Cameras[0];
     mCamera.Speed = 1.0f;
     mCamera.Sensitivity = 25000.0f;
 
-    auto& geometries = scene.Geometries;
-   
+    auto &geometries = scene.Geometries;
+
     uint32_t vertBufferSize = 0;
     uint32_t idxBufferSize = 0;
     uint32_t transBufferSize = 0;
     uint32_t matBufferSize = 0;
 
     // calculate the size required for the buffers
-    // Helper function defined in Base/Helpers.h 
+    // Helper function defined in Base/Helpers.h
     // writes to the parameters passed in
     CalculateBufferSizes(scene, vertBufferSize, idxBufferSize, transBufferSize, matBufferSize);
 
     // Store all the primitives in a single buffer, it is efficient to do so
     mVertexBuffer = mVRDev->CreateBuffer(
-        vertBufferSize, 
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer
-    );
+        vertBufferSize,
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mIndexBuffer = mVRDev->CreateBuffer(
-        idxBufferSize, 
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer
-    );
-
+        idxBufferSize,
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     mMaterialBuffer = mVRDev->CreateBuffer(
-        matBufferSize, 
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eStorageBuffer
-    );
-
+        matBufferSize,
+        vk::BufferUsageFlagBits::eStorageBuffer,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     // Create a buffer to store the transform for the BLAS
     mTransformBuffer = mVRDev->CreateBuffer(
-        transBufferSize, 
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
-    );
+        transBufferSize,
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
-
-	// Create info struct for the BLAS
+    // Create info struct for the BLAS
     std::vector<vr::BLASCreateInfo> blasCreateInfos;
 
     // Store the instanceID for each mesh so that we can use it to index into the material buffer
@@ -131,19 +118,18 @@ void Shading::CreateAS()
     uint32_t transOffset = 0;
     uint32_t matOffset = 0;
 
-    Vertex* vertData = (Vertex*)mVRDev->MapBuffer(mVertexBuffer);
-    uint32_t* idxData = (uint32_t*)mVRDev->MapBuffer(mIndexBuffer);
-    char* transData = (char*)mVRDev->MapBuffer(mTransformBuffer);
-    char* matData = (char*)mVRDev->MapBuffer(mMaterialBuffer);
+    Vertex *vertData = (Vertex *)mVRDev->MapBuffer(mVertexBuffer);
+    uint32_t *idxData = (uint32_t *)mVRDev->MapBuffer(mIndexBuffer);
+    char *transData = (char *)mVRDev->MapBuffer(mTransformBuffer);
+    char *matData = (char *)mVRDev->MapBuffer(mMaterialBuffer);
 
     // If the scene is too dark/bright, you can adjust the emissive multiplier here
     float EmissiveMultiplier = 100.0f;
 
     // Helper function defined in Base/Helpers.h to copy the scene data into the buffers
     CopySceneToBuffers(scene, vertData, idxData, transData, matData,
-        mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, mTransformBuffer.DevAddress,
-        instanceIDs, blasCreateInfos, EmissiveMultiplier, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
-
+                       mVertexBuffer.DevAddress, mIndexBuffer.DevAddress, mTransformBuffer.DevAddress,
+                       instanceIDs, blasCreateInfos, EmissiveMultiplier, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
 
     mVRDev->UnmapBuffer(mVertexBuffer);
     mVRDev->UnmapBuffer(mIndexBuffer);
@@ -152,28 +138,27 @@ void Shading::CreateAS()
 
     // Create the BLASes, one BLAS for each mesh in the scene
     // create build info for the BLASSes
-    std::vector<vr::BLASBuildInfo> buildInfos; 
+    std::vector<vr::BLASBuildInfo> buildInfos;
 
     mBLASHandles.reserve(blasCreateInfos.size());
     buildInfos.reserve(blasCreateInfos.size());
 
-    for (auto& info : blasCreateInfos)
+    for (auto &info : blasCreateInfos)
     {
-        auto& blas = mBLASHandles.emplace_back(vr::BLASHandle{});
-        auto& buildInfo = buildInfos.emplace_back(vr::BLASBuildInfo{});  
+        auto &blas = mBLASHandles.emplace_back(vr::BLASHandle{});
+        auto &buildInfo = buildInfos.emplace_back(vr::BLASBuildInfo{});
         std::tie(blas, buildInfo) = mVRDev->CreateBLAS(info);
     }
 
-
     vr::TLASCreateInfo tlasCreateInfo = {};
     tlasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
-    tlasCreateInfo.MaxInstanceCount = mBLASHandles.size(); 
+    tlasCreateInfo.MaxInstanceCount = mBLASHandles.size();
 
     auto [tlasHandle, tlasBuildInfo] = mVRDev->CreateTLAS(tlasCreateInfo);
 
     mTLASHandle = tlasHandle;
 
-    auto InstanceBuffer = mVRDev->CreateInstanceBuffer(mBLASHandles.size()); 
+    auto InstanceBuffer = mVRDev->CreateInstanceBuffer(mBLASHandles.size());
 
     std::vector<vk::AccelerationStructureInstanceKHR> instances;
 
@@ -181,18 +166,17 @@ void Shading::CreateAS()
     for (uint32_t i = 0; i < mBLASHandles.size(); i++)
     {
         auto inst = vk::AccelerationStructureInstanceKHR()
-            .setInstanceCustomIndex(instanceIDs[i]) // set the instance ID 
-            .setAccelerationStructureReference(mBLASHandles[i].Buffer.DevAddress)
-            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFlipFacing)
-            .setMask(0xFF)
-            .setInstanceShaderBindingTableRecordOffset(0);
+                        .setInstanceCustomIndex(instanceIDs[i]) // set the instance ID
+                        .setAccelerationStructureReference(mBLASHandles[i].Buffer.DevAddress)
+                        .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFlipFacing)
+                        .setMask(0xFF)
+                        .setInstanceShaderBindingTableRecordOffset(0);
 
         // set the transform matrix to identity
         inst.transform = {
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f
-        };
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f};
 
         instances.push_back(inst);
     }
@@ -203,32 +187,30 @@ void Shading::CreateAS()
     auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfos(buildInfos);
     auto TLASScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(tlasBuildInfo);
 
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
-
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
     // build the AS
 
-    mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    mVRDev->BuildBLAS(buildInfos, buildCmd);
 
-    mVRDev->AddAccelerationBuildBarrier(buildCmd); 
+    mVRDev->AddAccelerationBuildBarrier(buildCmd);
 
-
-    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, instances.size(), buildCmd); 
+    mVRDev->BuildTLAS(tlasBuildInfo, InstanceBuffer, instances.size(), buildCmd);
 
     buildCmd.end();
 
     // submit the command buffer and wait for it to finish
     auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
+                          .setCommandBufferCount(1)
+                          .setPCommandBuffers(&buildCmd);
 
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
+
     mDevice.waitIdle();
 
-    mVRDev->DestroyBuffer(BLASscratchBuffer); 
+    mVRDev->DestroyBuffer(BLASscratchBuffer);
     mVRDev->DestroyBuffer(TLASScratchBuffer);
 
     mVRDev->DestroyBuffer(InstanceBuffer);
@@ -239,25 +221,25 @@ void Shading::CreateAS()
 void Shading::CreateAccumulationImage()
 {
     auto imgInfo = vk::ImageCreateInfo()
-        .setImageType(vk::ImageType::e2D)
-        .setFormat(vk::Format::eR32G32B32A32Sfloat)
-        .setExtent(vk::Extent3D(mSwapchainResources.SwapchainExtent.width, mSwapchainResources.SwapchainExtent.height, 1))
-        .setMipLevels(1)
-        .setArrayLayers(1)
-        .setSamples(vk::SampleCountFlagBits::e1)
-        .setTiling(vk::ImageTiling::eOptimal)
-        .setUsage(vk::ImageUsageFlagBits::eStorage)
-        .setSharingMode(vk::SharingMode::eExclusive)
-        .setInitialLayout(vk::ImageLayout::eUndefined);
+                       .setImageType(vk::ImageType::e2D)
+                       .setFormat(vk::Format::eR32G32B32A32Sfloat)
+                       .setExtent(vk::Extent3D(mSwapchainResources.SwapchainExtent.width, mSwapchainResources.SwapchainExtent.height, 1))
+                       .setMipLevels(1)
+                       .setArrayLayers(1)
+                       .setSamples(vk::SampleCountFlagBits::e1)
+                       .setTiling(vk::ImageTiling::eOptimal)
+                       .setUsage(vk::ImageUsageFlagBits::eStorage)
+                       .setSharingMode(vk::SharingMode::eExclusive)
+                       .setInitialLayout(vk::ImageLayout::eUndefined);
 
     mAccumulationImageBuffer = mVRDev->CreateImage(imgInfo, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
 
     auto viewInfo = vk::ImageViewCreateInfo()
-        .setImage(mAccumulationImageBuffer.Image)
-        .setViewType(vk::ImageViewType::e2D)
-        .setFormat(vk::Format::eR32G32B32A32Sfloat)
-        .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
-    
+                        .setImage(mAccumulationImageBuffer.Image)
+                        .setViewType(vk::ImageViewType::e2D)
+                        .setFormat(vk::Format::eR32G32B32A32Sfloat)
+                        .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+
     mAccumulationImage.View = mDevice.createImageView(viewInfo);
     mAccumulationImage.Layout = vk::ImageLayout::eGeneral;
     // Create the accumulation image
@@ -275,10 +257,10 @@ void Shading::CreateRTPipeline()
         vr::DescriptorItem(6, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mAccumulationImage),
     };
 
-    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
+    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings);
 
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
-    
+
     auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/Shading/Shading.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
 
@@ -291,7 +273,7 @@ void Shading::CreateRTPipeline()
     vr::RayTracingShaderCollection shaderCollection = {};
 
     shaderCollection.RayGenShaders.push_back(shaderModule);
-    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen";
 
     shaderCollection.MissShaders.push_back(shaderModule);
     shaderCollection.MissShaders.back().EntryPoint = "miss";
@@ -301,16 +283,15 @@ void Shading::CreateRTPipeline()
     hitGroup.ClosestHitShader.EntryPoint = "chit";
     shaderCollection.HitGroups.push_back(hitGroup);
 
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    auto [pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
     mRTPipeline = pipeline;
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
-    
+
     mDevice.destroyShaderModule(shaderModule.Module);
 }
-
 
 void Shading::UpdateDescriptorSet()
 {
@@ -322,11 +303,10 @@ void Shading::Update(vk::CommandBuffer renderCmd)
     // begin the command buffer
     renderCmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-
-    mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorBuffer({mResourceDescBuffer}, renderCmd);
 
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
-    
+
     mVRDev->TransitionImageLayout(
         mOutputImageBuffer.Image,
         vk::ImageLayout::eUndefined,
@@ -336,30 +316,23 @@ void Shading::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
-
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight);
+    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight, 1, renderCmd);
 
     BlitImage(renderCmd);
 
-
-
     renderCmd.end();
-
-
 
     WaitForRendering();
 
     Present(renderCmd);
 
     UpdateCamera();
-
 }
-
 
 void Shading::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
-    
+
     // destroy all the resources we created
     mVRDev->DestroySBTBuffer(mSBTBuffer);
 
@@ -377,19 +350,18 @@ void Shading::Stop()
     mVRDev->DestroyBuffer(mTransformBuffer);
     mVRDev->DestroyBuffer(mMaterialBuffer);
 
-    for(auto& blas : mBLASHandles)
+    for (auto &blas : mBLASHandles)
         mVRDev->DestroyBLAS(blas);
 
     mVRDev->DestroyTLAS(mTLASHandle);
 }
-
 
 int main()
 {
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new Shading();
+    Application *app = new Shading();
 
     app->Start();
     app->Run();

@@ -4,7 +4,6 @@
 #include "FileRead.h"
 #include "ShaderCompiler.h"
 
-
 class DynamicTLAS : public Application
 {
 public:
@@ -12,21 +11,21 @@ public:
     virtual void Update(vk::CommandBuffer renderCmd) override;
     virtual void Stop() override;
 
-    //functions to break up the start function
+    // functions to break up the start function
     void CreateAS();
     void CreateRTPipeline();
     void UpdateDescriptorSet();
 
     void UpdateTLAS();
     void UpdateInstances();
-public:
 
+public:
     ShaderCompiler mShaderCompiler;
 
     vr::AllocatedBuffer mVertexBuffer;
     vr::AllocatedBuffer mIndexBuffer;
 
-	vr::SBTBuffer mSBTBuffer;      
+    vr::SBTBuffer mSBTBuffer;
 
     std::vector<vr::DescriptorItem> mResourceBindings;
     vk::DescriptorSetLayout mResourceDescriptorLayout;
@@ -37,26 +36,22 @@ public:
 
     vr::BLASHandle mBLASHandle;
 
-
     //[POI]
     vr::TLASHandle mTLASHandle;
-    vr::TLASBuildInfo mTLASBuildInfo; // save the build info so we can update the TLAS
+    vr::TLASBuildInfo mTLASBuildInfo;                                // save the build info so we can update the TLAS
     std::vector<vk::AccelerationStructureInstanceKHR> mInstanceData; // Keep the instance data in the cpu
-    vr::AllocatedBuffer mInstanceBuffer; // for the TLAS
-    vr::AllocatedBuffer mScratchBuffer; // for the TLAS so we don't have to create a new one every frame and can reuse it
-
-
+    vr::AllocatedBuffer mInstanceBuffer;                             // for the TLAS
+    vr::AllocatedBuffer mScratchBuffer;                              // for the TLAS so we don't have to create a new one every frame and can reuse it
 };
 
 void DynamicTLAS::Start()
 {
     CreateBaseResources();
-    
+
     CreateAS();
-    
+
     CreateRTPipeline();
     UpdateDescriptorSet();
-
 }
 
 void DynamicTLAS::CreateAS()
@@ -66,28 +61,25 @@ void DynamicTLAS::CreateAS()
     float vertices[] = {
         1.0f, -1.0f, 0.0f,
         -1.0f, -1.0f, 0.0f,
-        0.0f,  1.0f, 0.0f
-    };
-    uint32_t indices[] = { 0, 1, 2 };
+        0.0f, 1.0f, 0.0f};
+    uint32_t indices[] = {0, 1, 2};
 
     mVertexBuffer = mVRDev->CreateBuffer(
         sizeof(float) * 3 * 3,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR); // this buffer will be used as a source for the BLAS
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR, // this buffer will be used as a source for the BLAS
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mIndexBuffer = mVRDev->CreateBuffer(
         sizeof(uint32_t) * 3, // 3 vertices, 3 floats per vertex
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR);
-
+        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
     mVRDev->UpdateBuffer(mVertexBuffer, vertices, sizeof(float) * 3 * 3);
-    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3); 
-    
+    mVRDev->UpdateBuffer(mIndexBuffer, indices, sizeof(uint32_t) * 3);
 
     vr::BLASCreateInfo blasCreateInfo = {};
     blasCreateInfo.Flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
-    
+
     vr::GeometryData geomData = {};
 
     geomData.VertexFormat = vk::Format::eR32G32B32Sfloat;
@@ -99,12 +91,12 @@ void DynamicTLAS::CreateAS()
 
     blasCreateInfo.Geometries.push_back(geomData);
 
-   auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo); 
+    auto [blasHandle, buildInfo] = mVRDev->CreateBLAS(blasCreateInfo);
 
-    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo); 
+    auto BLASscratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(buildInfo);
 
     mBLASHandle = blasHandle;
-    
+
     // [POI]
     // create a TLAS now, we will build / update it in the UpdateTLAS(...) function
     // We could build it here, but to simplify the code we will build it in the UpdateTLAS(...) function
@@ -117,31 +109,29 @@ void DynamicTLAS::CreateAS()
 
     // create a buffer for the instance data
     mInstanceData = std::vector<vk::AccelerationStructureInstanceKHR>(5); // 5 instances
-    mInstanceBuffer = mVRDev->CreateInstanceBuffer(5); // 5 instances
+    mInstanceBuffer = mVRDev->CreateInstanceBuffer(5);                    // 5 instances
 
-
-
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool); 
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
 
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    std::vector<vr::BLASBuildInfo> buildInfos = { buildInfo }; 
-    
-    mVRDev->BuildBLAS(buildInfos, buildCmd); 
+    std::vector<vr::BLASBuildInfo> buildInfos = {buildInfo};
+
+    mVRDev->BuildBLAS(buildInfos, buildCmd);
 
     buildCmd.end();
 
     // submit the command buffer and wait for it to finish
     auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
+                          .setCommandBufferCount(1)
+                          .setPCommandBuffers(&buildCmd);
 
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
+
     mDevice.waitIdle();
 
     // Free the scratch buffers
-    mVRDev->DestroyBuffer(BLASscratchBuffer); 
+    mVRDev->DestroyBuffer(BLASscratchBuffer);
 
     mDevice.freeCommandBuffers(mGraphicsPool, buildCmd);
 }
@@ -151,37 +141,35 @@ void DynamicTLAS::UpdateInstances()
     float x = 0.0f, z = 0.0f;
     float time = glfwGetTime();
 
-    for(int i = 0; i < mInstanceData.size(); i++)
+    for (int i = 0; i < mInstanceData.size(); i++)
     {
         // cool animation for the instances
         x = cosf(time + i) + i;
         z = sinf(time + i) + i;
 
-        VkTransformMatrixKHR transform = { // 3x4 matrix
-            1.0f, 0.0f, 0.0f, x,
-            0.0f, 1.0f, 0.0f, 0.0,
-            0.0f, 0.0f, 1.0f, z
-        };
+        VkTransformMatrixKHR transform = {// 3x4 matrix
+                                          1.0f, 0.0f, 0.0f, x,
+                                          0.0f, 1.0f, 0.0f, 0.0,
+                                          0.0f, 0.0f, 1.0f, z};
 
         // copy the matrix data
 
         mInstanceData[i] = vk::AccelerationStructureInstanceKHR()
-            .setTransform(transform)
-            .setInstanceCustomIndex(0)
-            .setMask(0xFF)
-            .setInstanceShaderBindingTableRecordOffset(0)
-            .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
-            .setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress);
+                               .setTransform(transform)
+                               .setInstanceCustomIndex(0)
+                               .setMask(0xFF)
+                               .setInstanceShaderBindingTableRecordOffset(0)
+                               .setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable)
+                               .setAccelerationStructureReference(mBLASHandle.Buffer.DevAddress);
     }
 
     mVRDev->UpdateBuffer(mInstanceBuffer, mInstanceData.data(), sizeof(vk::AccelerationStructureInstanceKHR) * mInstanceData.size());
-
 }
 
 void DynamicTLAS::UpdateTLAS()
 {
     UpdateInstances();
-    auto buildCmd = mVRDev->CreateCommandBuffer(mGraphicsPool);
+    auto buildCmd = mDevice.allocateCommandBuffers(vk::CommandBufferAllocateInfo(mGraphicsPool, vk::CommandBufferLevel::ePrimary, 1))[0];
     buildCmd.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
     // [POI]
@@ -193,21 +181,20 @@ void DynamicTLAS::UpdateTLAS()
     // and update the descriptor set to point to the new TLAS.
     // Keep in mind that the UpdateTLAS(...) creates a new TLAS, so it is not actually an update, but a rebuild, Vulray doesn't offer TLAS updates, but rebuilds
     // This is because the TLAS degrades over time, so it is better to rebuild it every frame and the build time is negligible in real time applications
-    // NVIDIA best practices: https://developer.nvidia.com/blog/rtx-best-practices/ 
+    // NVIDIA best practices: https://developer.nvidia.com/blog/rtx-best-practices/
     std::tie(mTLASHandle, mTLASBuildInfo) = mVRDev->UpdateTLAS(mTLASHandle, mTLASBuildInfo, true);
 
     // if the new build scratch size is greater than the old one, we have to create a new scratch buffer
     // NOTE: When updating a TLAS Vulray actually recreates it, so we have to use buildScratchSize instead of updateScratchSize
-    if(mTLASBuildInfo.BuildSizes.buildScratchSize > mScratchBuffer.Size)
+    if (mTLASBuildInfo.BuildSizes.buildScratchSize > mScratchBuffer.Size)
     {
-        if(mScratchBuffer.Size > 0) // if not null
+        if (mScratchBuffer.Size > 0) // if not null
             mVRDev->DestroyBuffer(mScratchBuffer);
 
         mScratchBuffer = mVRDev->CreateScratchBufferFromBuildInfo(mTLASBuildInfo);
     }
 
     mVRDev->BuildTLAS(mTLASBuildInfo, mInstanceBuffer, mInstanceData.size(), buildCmd);
-
 
     mVRDev->AddAccelerationBuildBarrier(buildCmd);
 
@@ -216,22 +203,21 @@ void DynamicTLAS::UpdateTLAS()
     // submit the command buffer and wait for it to finish
     // ideally semaphores should be used here, but for simplicity we will just wait for the command buffer to finish
     auto submitInfo = vk::SubmitInfo()
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&buildCmd);
+                          .setCommandBufferCount(1)
+                          .setPCommandBuffers(&buildCmd);
 
     mQueues.GraphicsQueue.submit(submitInfo, nullptr);
-    
+
     mDevice.waitIdle();
 
     // Update the descriptor, if we had used a semaphores, we would have to wait for the build to finish before updating the descriptor
     // and make sure the descriptor is not used by the GPU at the same time
-    mVRDev->UpdateDescriptorBuffer( mResourceDescBuffer,
-                                    mResourceBindings[0], // the first binding is the TLAS
-                                    0, // index of pResources in the binding
-                                    vr::DescriptorBufferType::Resource,
-                                    0); // index of the set in the buffer
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer,
+                                   mResourceBindings[0], // the first binding is the TLAS
+                                   0,                    // index of pResources in the binding
+                                   vr::DescriptorBufferType::Resource,
+                                   0); // index of the set in the buffer
 }
-
 
 void DynamicTLAS::CreateRTPipeline()
 {
@@ -239,19 +225,17 @@ void DynamicTLAS::CreateRTPipeline()
     mResourceBindings = {
         vr::DescriptorItem(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mTLASHandle.Buffer.DevAddress),
         vr::DescriptorItem(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mUniformBuffer),
-        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR,1 , &mOutputImage)
-    };
+        vr::DescriptorItem(2, vk::DescriptorType::eStorageImage, vk::ShaderStageFlagBits::eRaygenKHR, 1, &mOutputImage)};
 
-
-    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings); 
+    mResourceDescriptorLayout = mVRDev->CreateDescriptorSetLayout(mResourceBindings);
 
     mPipelineLayout = mVRDev->CreatePipelineLayout(mResourceDescriptorLayout);
-    
+
     // create shaders for the ray tracing pipeline
 
     auto spv = mShaderCompiler.CompileSPIRVFromFile("Shaders/ColorfulTriangle/ColorfulTriangle.hlsl");
     auto shaderModule = mVRDev->CreateShaderFromSPV(spv);
-    
+
     vr::PipelineSettings pipelineSettings = {};
     pipelineSettings.PipelineLayout = mPipelineLayout;
     pipelineSettings.MaxRecursionDepth = 1;
@@ -261,7 +245,7 @@ void DynamicTLAS::CreateRTPipeline()
     vr::RayTracingShaderCollection shaderCollection = {};
 
     shaderCollection.RayGenShaders.push_back(shaderModule);
-    shaderCollection.RayGenShaders.back().EntryPoint = "rgen"; 
+    shaderCollection.RayGenShaders.back().EntryPoint = "rgen";
 
     shaderCollection.MissShaders.push_back(shaderModule);
     shaderCollection.MissShaders.back().EntryPoint = "miss";
@@ -271,23 +255,22 @@ void DynamicTLAS::CreateRTPipeline()
     hitGroup.ClosestHitShader.EntryPoint = "chit";
     shaderCollection.HitGroups.push_back(hitGroup);
 
-    auto[pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
+    auto [pipeline, sbtInfo] = mVRDev->CreateRayTracingPipeline(shaderCollection, pipelineSettings);
     mRTPipeline = pipeline;
 
     mSBTBuffer = mVRDev->CreateSBT(mRTPipeline, sbtInfo);
 
     mResourceDescBuffer = mVRDev->CreateDescriptorBuffer(mResourceDescriptorLayout, mResourceBindings, vr::DescriptorBufferType::Resource);
-    
+
     mDevice.destroyShaderModule(shaderModule.Module);
 }
-
 
 void DynamicTLAS::UpdateDescriptorSet()
 {
 
     mCamera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
 
-    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);    
+    mVRDev->UpdateDescriptorBuffer(mResourceDescBuffer, mResourceBindings, vr::DescriptorBufferType::Resource);
 }
 
 void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
@@ -296,7 +279,7 @@ void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
 
     UpdateTLAS();
 
-    mVRDev->BindDescriptorBuffer({ mResourceDescBuffer }, renderCmd);
+    mVRDev->BindDescriptorBuffer({mResourceDescBuffer}, renderCmd);
     mVRDev->BindDescriptorSet(mPipelineLayout, 0, 0, 0, renderCmd);
 
     mVRDev->TransitionImageLayout(
@@ -306,14 +289,12 @@ void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
         vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
         renderCmd);
 
-    mVRDev->DispatchRays(renderCmd, mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight);
+    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight, 1, renderCmd);
 
     // Helper function in Application Class to blit the image to the swapchain image
     BlitImage(renderCmd);
 
     renderCmd.end();
-
-
 
     WaitForRendering();
 
@@ -322,11 +303,10 @@ void DynamicTLAS::Update(vk::CommandBuffer renderCmd)
     UpdateCamera();
 }
 
-
 void DynamicTLAS::Stop()
 {
     auto _ = mDevice.waitForFences(mRenderFence, VK_TRUE, UINT64_MAX);
-    
+
     mVRDev->DestroyBuffer(mScratchBuffer);
     mVRDev->DestroyBuffer(mInstanceBuffer);
 
@@ -345,13 +325,12 @@ void DynamicTLAS::Stop()
     mVRDev->DestroyTLAS(mTLASHandle);
 }
 
-
 int main()
 {
     // Create the application, start it, run it and stop it, boierplate code, eg initialising vulkan, glfw, etc
     // that is the same for every application is handled by the Application class
     // it can be found in the Base folder
-	Application* app = new DynamicTLAS();
+    Application *app = new DynamicTLAS();
 
     app->Start();
     app->Run();
