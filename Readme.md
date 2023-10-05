@@ -10,7 +10,7 @@ to see what is declared there and [Apllication.cpp](https://github.com/Sirtsu55/
 
 ### Building
 - Meet the requirements of [Vulray](https://github.com/Sirtsu55/Vulray)
-- Tested with CMake 3.22
+- Tested with CMake 3.25
 - C++ 20 compiler
 
 ### Samples Structure
