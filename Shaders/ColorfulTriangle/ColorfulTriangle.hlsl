@@ -40,11 +40,10 @@ void rgen()
 
 
 
-
 [shader("closesthit")]
-void chit(inout Payload p, in float2 attribs)
+void chit(inout Payload p, in BuiltInTriangleIntersectionAttributes attribs)
 {
-  const float3 barycentricCoords = float3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+  const float3 barycentricCoords = float3(1.0f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
   p.hitValue = barycentricCoords;
 }
 

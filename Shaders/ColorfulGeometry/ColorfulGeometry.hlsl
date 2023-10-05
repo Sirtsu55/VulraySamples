@@ -42,7 +42,7 @@ void rgen()
 
 
 [shader("closesthit")]
-void chit(inout Payload p, in float2 attribs)
+void chit(inout Payload p, in BuiltInTriangleIntersectionAttributes attribs)
 {
 	// Get the material index from the geometry index
 	// IndexID() is the index that we set when creating the TLAS instance

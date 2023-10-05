@@ -44,7 +44,7 @@ struct CallableData
 };
 
 [shader("closesthit")]
-void chit(inout Payload p, in float2 attribs)
+void chit(inout Payload p, in BuiltInTriangleIntersectionAttributes attribs)
 {
     // [POI]
     // we determine the callable shader to call based on the geometry index in th BLAS

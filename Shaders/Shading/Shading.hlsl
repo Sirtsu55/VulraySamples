@@ -112,7 +112,7 @@ void rgen()
 
 // [POI]
 [shader("closesthit")]
-void chit(inout Payload p, in float2 barycentrics)
+void chit(inout Payload p, in BuiltInTriangleIntersectionAttributes attribs)
 {
 
 	GPUMaterial mat = materials[InstanceID() + GeometryIndex()];
@@ -125,7 +125,7 @@ void chit(inout Payload p, in float2 barycentrics)
 
 	float3 v = WorldRayDirection();
 
-	float3 normal = InterpolateTriangle(normals, barycentrics);
+    float3 normal = InterpolateTriangle(normals, attribs.barycentrics);
 	normal = faceforward(normal, v, normal); // make sure normal is facing the camera
 
 	float time = otherInfo.x; // Extract time from the uniform buffer

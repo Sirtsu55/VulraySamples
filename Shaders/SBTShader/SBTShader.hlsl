@@ -36,9 +36,8 @@ void rgen()
 // [POI] This is how we can access the SBT data from the shader
 [[vk::shader_record_ext]] cbuffer hitRecord { float3 triangleColor; }
 [shader("closesthit")]
-void chit(inout Payload p, in float2 attribs)
+void chit(inout Payload p, in BuiltInTriangleIntersectionAttributes attribs)
 {
-
     p.hitValue = triangleColor;
 }
 
