@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project("VulraySamples")
 
-find_package(Vulkan REQUIRED COMPONENTS dxc)
+find_package(Vulkan REQUIRED)
 
 
 if(WIN32) # on Windows, we need to copy the vulkan dlls to the output directory, but on Linux, we don't need to do that, because its in the system path
@@ -25,12 +25,13 @@ include_directories(
 	"Vendor/glm/"
 	"Vendor/tinygltf/"
 	"${Vulkan_INCLUDE_DIRS}"
+	"${PROJECT_SOURCE_DIR}/"
 	)
 	
-link_directories("Vulray" "Vendor/glfw/src")
+link_directories("Vulray" "Vendor/glfw/src" "${PROJECT_SOURCE_DIR}/dxc")
 
 
-link_libraries(Vulray glfw Vulkan::dxc_lib)
+link_libraries(Vulray glfw dxcompiler)
 
 # helper function to copy shaders to the output directory for each sample
 function(ConfigureTarget tgt)

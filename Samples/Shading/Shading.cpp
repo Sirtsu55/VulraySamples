@@ -316,7 +316,7 @@ void Shading::Update(vk::CommandBuffer renderCmd)
 
     renderCmd.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, mRTPipeline);
 
-    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mWindowWidth, mWindowHeight, 1, renderCmd);
+    mVRDev->DispatchRays(mRTPipeline, mSBTBuffer, mRenderWidth, mRenderHeight, 1, renderCmd);
 
     BlitImage(renderCmd);
 
